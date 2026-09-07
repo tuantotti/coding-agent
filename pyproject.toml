@@ -1,14 +1,13 @@
 [project]
-name = "rag-recommendation-api"
+name = "agent-coding"
 version = "0.1.0"
-description = "RAG-powered product recommendation API built with LangChain and LangGraph."
+description = ""
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
-    "chromadb>=0.5.0",
+    "deepagents>=0.7.13",
     "fastapi>=0.115.0",
     "langchain>=0.3.0",
-    "langchain-chroma>=0.1.4",
     "langchain-openai>=0.2.0",
     "langgraph>=0.2.0",
     "pydantic-settings>=2.5.0",
@@ -20,7 +19,7 @@ dev = ["pytest>=8.3.0", "pytest-asyncio>=0.24.0", "ruff>=0.7.0"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "D"]
