@@ -1,13 +1,14 @@
 """Top-level factory for the coordinated Deep Agents coding team."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-from deepagents import FilesystemMiddleware, create_deep_agent
+from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
+from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph.state import CompiledStateGraph
 
 from agents.config import READ_ONLY_PERMISSIONS, READ_TOOLS, filesystem_middleware
 from agents.information_retriever import create_information_retriever_subagent
@@ -34,7 +35,7 @@ class AgentSettings:
     """
 
     workspace_root: Path | str | None = None
-    model: Any = "openai:gpt-5.4"
+    model: str | BaseChatModel = "openai:gpt-5.4"
     checkpointer: BaseCheckpointSaver | None = None
     max_remediation_cycles: int = 2
     shell_timeout_seconds: int = 120
@@ -59,10 +60,16 @@ def _create_backend(settings: AgentSettings, workspace_root: Path) -> CompositeB
         inherit_env=True,
     )
     packaged_skills = FilesystemBackend(root_dir=_SKILLS_ROOT)
-    return CompositeBackend(default=workspace, routes={"/agent_skills/": packaged_skills})
+    return CompositeBackend(
+        default=workspace,
+        routes={
+            "/agent_skills/": packaged_skills,
+            "/": FilesystemBackend(root_dir=workspace_root),
+        },
+    )
 
 
-def create_coding_agent(settings: AgentSettings | None = None) -> Any:
+def create_coding_agent(settings: AgentSettings | None = None) -> CompiledStateGraph:
     """Build the compiled coordinator graph.
 
     Invoke the graph with a stable LangGraph ``thread_id``. Writes, deletes, and

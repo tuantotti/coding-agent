@@ -1,14 +1,16 @@
 """Programmer subagent specification."""
 
-from typing import Any
-
+from deepagents import SubAgent
 from deepagents.backends.protocol import BackendProtocol
+from langchain_core.language_models import BaseChatModel
 
 from agents.config import WRITE_WITH_APPROVAL_PERMISSIONS, filesystem_middleware
 from prompts import load_prompt
 
 
-def create_programmer_subagent(model: Any, backend: BackendProtocol) -> dict[str, Any]:
+def create_programmer_subagent(
+    model: str | BaseChatModel, backend: BackendProtocol
+) -> SubAgent:
     """Return the isolated specialist that is allowed to change code."""
     return {
         "name": "programmer",
@@ -18,7 +20,15 @@ def create_programmer_subagent(model: Any, backend: BackendProtocol) -> dict[str
         "middleware": [
             filesystem_middleware(
                 backend,
-                ["ls", "read_file", "glob", "grep", "write_file", "edit_file", "delete"],
+                [
+                    "ls",
+                    "read_file",
+                    "glob",
+                    "grep",
+                    "write_file",
+                    "edit_file",
+                    "delete",
+                ],
                 WRITE_WITH_APPROVAL_PERMISSIONS,
             )
         ],

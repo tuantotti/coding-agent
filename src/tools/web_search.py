@@ -26,11 +26,13 @@ def normalize_tavily_results(response: Any) -> list[dict[str, str]]:
             continue
         title = item.get("title")
         content = item.get("content") or item.get("raw_content")
-        normalized.append({
-            "title": title if isinstance(title, str) else url,
-            "url": url,
-            "content": content if isinstance(content, str) else "",
-        })
+        normalized.append(
+            {
+                "title": title if isinstance(title, str) else url,
+                "url": url,
+                "content": content if isinstance(content, str) else "",
+            }
+        )
     return normalized
 
 
@@ -60,5 +62,5 @@ def create_tavily_search_tool(max_results: int = 5) -> StructuredTool:
     return StructuredTool.from_function(
         func=search_web,
         name="search_web",
-        description="Search the web for current technical information and return cited results.",
+        description="Search technical information and return cited web results.",
     )
