@@ -1,48 +1,186 @@
-# RAG Recommendation API
+# Coding Agent API
 
-A catalog-grounded recommendation service built with FastAPI, LangChain,
-LangGraph, OpenAI, and Chroma.
-
-## Architecture
-
-`POST /v1/index/products` is the indexing phase: it converts products into
-LangChain documents and upserts their OpenAI embeddings into a persistent
-Chroma collection.
-
-`POST /v1/recommendations` is the retrieval phase: a LangGraph pipeline
-retrieves relevant products, then `ChatOpenAI` produces structured,
-catalog-grounded recommendations.
+A local FastAPI service coordinating Deep Agents programmer, reviewer, tester,
+and information-retrieval specialists. Submit a local source folder with each
+task, stream progress and assistant text, and explicitly approve proposed writes,
+deletes, and shell commands. Polling remains available.
 
 ## Setup
+
+Requires Python 3.12+ and uv.
 
 ```bash
 uv sync --all-groups
 cp .env.example .env
-# Edit .env and set OPENAI_API_KEY
-uv run uvicorn main:app --app-dir src --reload
+# Configure your model provider and TAVILY_API_KEY in .env.
+uv run uvicorn main:app --app-dir src --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-## Index a catalog
+Interactive API documentation: http://127.0.0.1:8000/docs.
+Startup validates configuration. Each submitted run gets its own graph and
+checkpointer, retained across approval pauses. Importing
+`main` does not require credentials or create external clients.
+
+| Setting | Default |
+| --- | --- |
+| OPENAI_API_KEY | Required when using OpenAI |
+| AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, OPENAI_API_VERSION | Used for Azure OpenAI |
+| TAVILY_API_KEY | Required |
+| CODING_MODEL | openai:gpt-5.4 |
+| CODING_WORKSPACE_ROOT | Default for direct Python usage only |
+| CODING_MAX_REMEDIATION_CYCLES | 2 |
+| CODING_SHELL_TIMEOUT_SECONDS | 120 |
+
+Environment variables override .env. Model deployment availability depends on
+your provider account. API clients select their source folder but cannot
+override model credentials.
+
+## Submit and poll
 
 ```bash
-curl -X POST http://127.0.0.1:8000/v1/index/products \
-  -H 'content-type: application/json' \
-  -d '{"products":[{"id":"shoe-1","name":"Trail Runner","description":"Water-resistant shoe for technical trails.","category":"footwear","price":120,"attributes":{"terrain":"trail"}}]}'
+curl http://127.0.0.1:8000/health
+curl -X POST http://127.0.0.1:8000/v1/runs \
+  -H 'Content-Type: application/json' \
+  -d '{"task":"Review this project for bugs.","source_folder":"/absolute/path/to/project"}'
+curl http://127.0.0.1:8000/v1/runs/RUN_ID
 ```
 
-## Request recommendations
+Submission returns HTTP 202 with a generated `run_id`. Poll that ID for
+`queued`, `running`, `awaiting_approval`, `completed`, or `failed`.
+Responses include the resolved `source_folder`, timestamps, final assistant
+`output`, pending `approvals`,
+and a sanitized `error`. Internal graph state is not returned.
+
+The source folder is required and must be an absolute path to an existing,
+readable directory on the API server. Symlinks are resolved before execution.
+The selected directory becomes the file-tool root and shell working directory.
+Missing, relative, nonexistent, or inaccessible paths return HTTP 422. Old
+task-only submissions must add this field; no default is silently substituted.
+This is not a file-upload API: a remote client's files must first be mounted or
+copied to the server.
+
+Only one unfinished run is permitted across this server, including while
+awaiting approval, even when requests select different folders. A conflicting
+submission returns HTTP 409. Review-only prompts return inspection findings;
+they no longer automatically trigger implementation and testing.
+
+## Stream results
+
+After submission, connect to the run's Server-Sent Events endpoint:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/v1/recommendations \
-  -H 'content-type: application/json' \
-  -d '{"query":"I need a durable shoe for wet hiking trails","category":"footwear"}'
+curl -N http://127.0.0.1:8000/v1/runs/RUN_ID/events
 ```
 
-## Development
+Events have a monotonically increasing per-run `id`, an `event` type, and JSON
+`data` containing `run_id`, `timestamp`, and event-specific fields:
+
+| Event | Data |
+| --- | --- |
+| status | queued or running status |
+| text_delta | visible assistant text, message_id, agent, agent_path |
+| agent_activity | graph node and subgraph path reporting progress |
+| approval_required | awaiting_approval status and ordered approvals |
+| completed | completed status and final root assistant output |
+| failed | failed status and sanitized error |
+
+Specialist text is identified separately from the coordinator's final output.
+Models without token streaming may emit complete text chunks. Reasoning blocks,
+raw graph state, and provider exception details are excluded.
+
+The connection remains open while awaiting approval and sends a heartbeat
+comment every 15 seconds when idle. Submit decisions through the resume endpoint;
+events continue on the same connection. Completion or failure closes the stream.
+Disconnecting a stream does not cancel the agent, and multiple subscribers are
+supported. Browser clients should close their EventSource on terminal events.
+
+Reconnect after the last event you received:
+
+```bash
+curl -N -H 'Last-Event-ID: 12' http://127.0.0.1:8000/v1/runs/RUN_ID/events
+```
+
+The latest 1,000 events per run are retained in memory. Without a cursor, replay
+starts at event 1. An expired cursor (including a late initial connection after
+event 1 has been evicted) returns HTTP 409; malformed or future cursors return
+422, and unknown runs return 404. A connected subscriber that falls behind
+receives `replay_expired` and is disconnected. Poll the run for its complete
+final result if replay history is no longer available.
+
+## Approve and resume
+
+When a run pauses, inspect every entry in `approvals`. Each contains an
+`interrupt_id`, ordered `action_requests` (tool name, arguments, description),
+and `review_configs` describing allowed decisions.
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/runs/RUN_ID/resume \
+  -H 'Content-Type: application/json' \
+  -d '{"decisions":{"INTERRUPT_ID":[{"type":"approve"}]}}'
+```
+
+Supply exactly the pending interrupt IDs and one decision per action, preserving
+the order returned by the API. Available decision shapes are:
+
+```json
+{"type":"approve"}
+{"type":"reject","message":"Do not run this command."}
+{"type":"edit","edited_action":{"name":"execute","args":{"command":"pytest -q"}}}
+```
+
+Edits must preserve the tool name and match the supplied argument schema;
+invalid edits return 422 without consuming pending approvals.
+Resumption returns HTTP 202 and continues the
+same checkpoint; poll again because the agent may request further approvals.
+Never automatically approve every request. Rejection gives feedback to the agent;
+it does not cancel the whole run.
+
+Errors: HTTP 404 for an unknown run; 409 for occupied workspace, duplicate
+resume, or a run not awaiting approval; 422 for malformed input, stale/missing
+interrupt IDs, mismatched decision counts, or disallowed decisions.
+
+## Design and operational limits
+
+- `src/agents`: typed graph and specialist factories.
+- `src/services`: injected graph, run storage, background task lifecycle,
+  workspace serialization, and approval handling independent of HTTP.
+- `src/routes` and `src/models`: thin HTTP handlers and Pydantic contracts.
+- `src/main.py`: application factory, dependency lifetime, and error mapping.
+- `src/prompts`, `src/skills`, and `src/tools`: role instructions, reusable
+  workflows, and Tavily integration.
+
+This is an unauthenticated localhost API for one trusted user, one process, and
+one active run at a time. Do not expose it as a shared remote service.
+Run summaries and event history live in memory and disappear on restart.
+Graphs and checkpoints are released after terminal outcomes. Avoid auto-reload
+during active runs.
+Shutdown cancels and awaits tracked Python jobs; an already approved host command
+may continue until it exits or reaches its timeout.
+
+Commands run through LocalShellBackend on the host with the server's environment
+and permissions. File tools use workspace-rooted virtual paths and a protected
+skills mount; these restrictions do not sandbox shell commands. Review every
+command and proposed change before approving. The tester lacks file-edit tools,
+but an approved command can still modify files.
+
+The two-remediation-cycle limit is prompt-directed, not a guaranteed execution
+counter. The service also sets a graph recursion limit to terminate runaway runs.
+Failures do not roll back changes already approved and executed.
+
+## Python usage and testing
+
+With `src` on PYTHONPATH, use `from agents import AgentSettings,
+create_coding_agent`. The factory returns a compiled graph; supply a stable
+`configurable.thread_id` for invocation and LangGraph `Command(resume=...)`
+for direct approval handling. The service uses each run ID as its thread ID.
+Its Python interface now takes a graph factory accepting a resolved `Path`,
+and `await service.start(task, source_folder)` requires an explicit folder.
 
 ```bash
 uv run ruff check .
-uv run pytest
+uv run ruff format --check .
+uv run pytest -q
 ```
 
-Vector data is persisted beneath `.data/chroma` and excluded from Git.
+Tests inject fake graphs and a deterministic chat model; no provider credentials
+or live model/search requests are required.
