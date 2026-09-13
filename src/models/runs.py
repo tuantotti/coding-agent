@@ -1,9 +1,28 @@
 """Run lifecycle and human approval contracts."""
 
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, JsonValue
+
+
+def resolve_source_folder(value: Path | str) -> Path:
+    """Resolve an explicitly supplied, readable absolute source directory."""
+    path = Path(value)
+    if not path.is_absolute():
+        raise ValueError("source_folder must be an absolute path.")
+    try:
+        path = path.resolve(strict=True)
+        if not path.is_dir() or not os.access(path, os.R_OK | os.X_OK):
+            raise ValueError("source_folder must be a readable directory.")
+    except (OSError, RuntimeError) as exc:
+        raise ValueError("source_folder must be an accessible directory.") from exc
+    return path
+
+
+SourceFolder = Annotated[Path, AfterValidator(resolve_source_folder)]
 
 
 def utc_now() -> datetime:
@@ -21,6 +40,7 @@ class StartRun(Contract):
     """Request a coding task."""
 
     task: str = Field(min_length=1, max_length=50000)
+    source_folder: SourceFolder
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -87,6 +107,7 @@ class Run(Contract):
     """Public run state; internal graph state is never returned."""
 
     run_id: str
+    source_folder: Path
     status: Literal["queued", "running", "awaiting_approval", "completed", "failed"] = (
         "queued"
     )

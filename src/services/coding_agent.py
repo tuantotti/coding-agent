@@ -2,24 +2,30 @@
 
 import asyncio
 import logging
-from collections.abc import MutableMapping
-from typing import Any, Protocol
+from collections.abc import Callable, MutableMapping
+from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
-from langchain_core.messages import AIMessage
+from jsonschema import ValidationError, validate
 from langgraph.types import Command
 
-from models.runs import PendingApproval, ResumeRun, Run, utc_now
+from models.runs import (
+    PendingApproval,
+    ResumeRun,
+    Run,
+    resolve_source_folder,
+    utc_now,
+)
+from services.events import EventLog
+from services.graph_stream import AgentGraph, GraphStream
+from tools.approval import include_argument_schemas
 
 logger = logging.getLogger(__name__)
 
 
-class AgentGraph(Protocol):
-    """Minimal graph interface required by the service."""
-
-    async def ainvoke(self, input: Any, config: dict) -> dict:
-        """Invoke or resume the graph asynchronously."""
-        ...
+class InvalidSourceFolder(ValueError):
+    """The requested source directory cannot be used."""
 
 
 class RunNotFound(Exception):
@@ -38,10 +44,14 @@ class CodingAgentService:
     """Own graph lifetime, run state, and workspace serialization."""
 
     def __init__(
-        self, graph: AgentGraph, store: MutableMapping[str, Run] | None = None
+        self,
+        graph_factory: Callable[[Path], AgentGraph],
+        store: MutableMapping[str, Run] | None = None,
     ) -> None:
-        """Inject a graph and optional in-memory-compatible run store."""
-        self._graph = graph
+        """Inject a per-workspace graph factory and optional run store."""
+        self._graph_factory = graph_factory
+        self._graphs: dict[str, AgentGraph] = {}
+        self._events: dict[str, EventLog] = {}
         self._store = store if store is not None else {}
         self._lock = asyncio.Lock()
         self._tasks: set[asyncio.Task] = set()
@@ -54,16 +64,27 @@ class CodingAgentService:
         except KeyError as exc:
             raise RunNotFound("Run not found.") from exc
 
-    async def start(self, task: str) -> Run:
+    def event_log(self, run_id: str) -> EventLog:
+        """Return the run's replay buffer, or raise RunNotFound."""
+        self.get(run_id)
+        return self._events[run_id]
+
+    async def start(self, task: str, source_folder: Path | str) -> Run:
         """Reserve the workspace and schedule a new run."""
+        try:
+            root = resolve_source_folder(source_folder)
+        except ValueError as exc:
+            raise InvalidSourceFolder(str(exc)) from exc
         async with self._lock:
             if self._closed or any(
                 run.status not in {"completed", "failed"}
                 for run in self._store.values()
             ):
                 raise RunConflict("Workspace already has an unfinished run.")
-            run = Run(run_id=str(uuid4()))
+            run = Run(run_id=str(uuid4()), source_folder=root)
             self._store[run.run_id] = run
+            self._events[run.run_id] = EventLog(run.run_id)
+            await self._events[run.run_id].publish("status", {"status": run.status})
             self._schedule(
                 run.run_id, {"messages": [{"role": "user", "content": task}]}
             )
@@ -97,6 +118,13 @@ class CodingAgentService:
                         and decision.edited_action.name != action.name
                     ):
                         raise InvalidApproval("Edits must preserve the tool name.")
+                    if decision.type == "edit" and config.args_schema is not None:
+                        try:
+                            validate(decision.edited_action.args, config.args_schema)
+                        except ValidationError as exc:
+                            raise InvalidApproval(
+                                "Edited arguments do not match the tool schema."
+                            ) from exc
                 payload[approval.interrupt_id] = {
                     "decisions": [
                         decision.model_dump(exclude_none=True) for decision in decisions
@@ -106,6 +134,7 @@ class CodingAgentService:
             run.approvals = []
             run.updated_at = utc_now()
             self._store[run_id] = run
+            await self._events[run_id].publish("status", {"status": run.status})
             self._schedule(run_id, Command(resume=payload))
             return self.get(run_id)
 
@@ -118,26 +147,41 @@ class CodingAgentService:
         run = self._store[run_id]
         run.status = "running"
         run.updated_at = utc_now()
+        events = self._events[run_id]
         try:
-            result = await self._graph.ainvoke(
-                input, {"configurable": {"thread_id": run_id}, "recursion_limit": 200}
-            )
-            interrupts = result.get("__interrupt__", ())
+            await events.publish("status", {"status": run.status})
+            if run_id not in self._graphs:
+                self._graphs[run_id] = await asyncio.to_thread(
+                    self._graph_factory, run.source_folder
+                )
+            stream = GraphStream()
+            async for kind, data in stream.events(
+                self._graphs[run_id],
+                input,
+                {"configurable": {"thread_id": run_id}, "recursion_limit": 200},
+            ):
+                await events.publish(kind, data)
+            interrupts = stream.interrupts.values()
             if interrupts:
                 run.approvals = [
-                    PendingApproval(interrupt_id=item.id, **item.value)
+                    include_argument_schemas(
+                        PendingApproval(interrupt_id=item.id, **item.value)
+                    )
                     for item in interrupts
                 ]
                 run.status = "awaiting_approval"
-            else:
-                run.output = next(
-                    (
-                        message.text
-                        for message in reversed(result.get("messages", []))
-                        if isinstance(message, AIMessage) and message.text
-                    ),
-                    "",
+                await events.publish(
+                    "approval_required",
+                    {
+                        "status": run.status,
+                        "approvals": [
+                            approval.model_dump(mode="json")
+                            for approval in run.approvals
+                        ],
+                    },
                 )
+            else:
+                run.output = stream.output()
                 run.status = "completed"
         except asyncio.CancelledError:
             run.status = "failed"
@@ -151,6 +195,16 @@ class CodingAgentService:
         finally:
             run.updated_at = utc_now()
             self._store[run_id] = run
+            if run.status in {"completed", "failed"}:
+                self._graphs.pop(run_id, None)
+                await events.publish(
+                    run.status,
+                    {
+                        "status": run.status,
+                        "output": run.output,
+                        "error": run.error,
+                    },
+                )
 
     async def close(self) -> None:
         """Stop accepting work and await cancellation of tracked jobs."""
@@ -165,3 +219,11 @@ class CodingAgentService:
                 run.status = "failed"
                 run.error = "Run stopped during application shutdown."
                 run.updated_at = utc_now()
+                self._graphs.pop(run.run_id, None)
+                await self._events[run.run_id].publish(
+                    "failed",
+                    {
+                        "status": run.status,
+                        "error": run.error,
+                    },
+                )

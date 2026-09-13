@@ -1,7 +1,7 @@
 """FastAPI entry point for the trusted local coding-agent API."""
 
-import os
 from contextlib import asynccontextmanager
+from dataclasses import replace
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -11,9 +11,11 @@ from routes.runs import router
 from services.coding_agent import (
     CodingAgentService,
     InvalidApproval,
+    InvalidSourceFolder,
     RunConflict,
     RunNotFound,
 )
+from services.events import InvalidCursor, ReplayExpired
 from settings import ServerSettings
 
 
@@ -29,10 +31,12 @@ def create_app(
         if active_service is None:
             config = settings or ServerSettings()
             # LangChain provider integrations read their standard environment keys.
-            os.environ["OPENAI_API_KEY"] = config.openai_api_key.get_secret_value()
-            os.environ["TAVILY_API_KEY"] = config.tavily_api_key.get_secret_value()
+            config.configure_provider_environment()
+            base_settings = config.agent_settings()
             active_service = CodingAgentService(
-                create_coding_agent(config.agent_settings())
+                lambda root: create_coding_agent(
+                    replace(base_settings, workspace_root=root, checkpointer=None)
+                )
             )
         app.state.coding_agent_service = active_service
         app.state.ready = True
@@ -55,10 +59,24 @@ def create_app(
         )
 
     async def service_error(request: Request, exc: Exception) -> JSONResponse:
-        status = {RunNotFound: 404, RunConflict: 409, InvalidApproval: 422}[type(exc)]
+        status = {
+            RunNotFound: 404,
+            RunConflict: 409,
+            InvalidApproval: 422,
+            InvalidSourceFolder: 422,
+            InvalidCursor: 422,
+            ReplayExpired: 409,
+        }[type(exc)]
         return JSONResponse({"detail": str(exc)}, status_code=status)
 
-    for exception in (RunNotFound, RunConflict, InvalidApproval):
+    for exception in (
+        RunNotFound,
+        RunConflict,
+        InvalidApproval,
+        InvalidSourceFolder,
+        InvalidCursor,
+        ReplayExpired,
+    ):
         app.add_exception_handler(exception, service_error)
     return app
 

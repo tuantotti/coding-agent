@@ -1,5 +1,6 @@
 """Environment configuration for the local coding-agent server."""
 
+import os
 from pathlib import Path
 
 from pydantic import DirectoryPath, Field, SecretStr
@@ -11,13 +12,51 @@ from agents import AgentSettings
 class ServerSettings(BaseSettings):
     """Validate server configuration without creating model clients."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).resolve().parents[1] / ".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
     coding_model: str = Field(default="openai:gpt-5.4", min_length=1)
     coding_workspace_root: DirectoryPath = Field(default_factory=Path.cwd)
     coding_max_remediation_cycles: int = Field(default=2, ge=0)
     coding_shell_timeout_seconds: int = Field(default=120, gt=0)
-    openai_api_key: SecretStr = Field(min_length=1)
     tavily_api_key: SecretStr = Field(min_length=1)
+    openai_api_key: SecretStr | None = None
+    azure_openai_api_key: SecretStr | None = None
+    azure_openai_endpoint: str | None = None
+    openai_api_version: str | None = None
+    langsmith_tracing: bool = False
+    langsmith_endpoint: str | None = None
+    langsmith_api_key: SecretStr | None = None
+    langsmith_project: str | None = None
+
+    def configure_provider_environment(self) -> None:
+        """Expose resolved provider settings to LangChain and LangSmith SDKs.
+
+        Call once at application startup. Pydantic loads dotenv values into
+        this instance but does not populate the process environment itself.
+        """
+        for name in (
+            "openai_api_key",
+            "azure_openai_api_key",
+            "azure_openai_endpoint",
+            "openai_api_version",
+            "tavily_api_key",
+            "langsmith_tracing",
+            "langsmith_endpoint",
+            "langsmith_api_key",
+            "langsmith_project",
+        ):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            if isinstance(value, SecretStr):
+                value = value.get_secret_value()
+            elif isinstance(value, bool):
+                value = str(value).lower()
+            os.environ[name.upper()] = value
 
     def agent_settings(self) -> AgentSettings:
         """Translate server settings to the existing graph factory contract."""
