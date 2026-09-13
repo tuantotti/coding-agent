@@ -30,15 +30,18 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         active_service = service
+        tracing = None
         if active_service is None:
             config = settings or ServerSettings()
             # LangChain provider integrations read their standard environment keys.
             config.configure_provider_environment()
             base_settings = config.agent_settings()
+            tracing = create_tracing(config)
             active_service = CodingAgentService(
                 lambda root: create_coding_agent(
                     replace(base_settings, workspace_root=root, checkpointer=None)
-                )
+                ),
+                callback_factory=tracing.callback_factory if tracing else None,
             )
         app.state.coding_agent_service = active_service
         app.state.ready = True
@@ -46,7 +49,11 @@ def create_app(
             yield
         finally:
             app.state.ready = False
-            await active_service.close()
+            try:
+                await active_service.close()
+            finally:
+                if tracing is not None:
+                    await tracing.close()
 
     app = FastAPI(title="Coding Agent API", lifespan=lifespan)
     app.state.ready = False
@@ -84,3 +91,12 @@ def create_app(
 
 
 app = create_app()
+
+
+def main() -> None:
+    """Run the trusted local API using package-qualified imports."""
+    uvicorn.run("src.main:app", host="127.0.0.1", port=8000, workers=1)
+
+
+if __name__ == "__main__":
+    main()
