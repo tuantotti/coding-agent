@@ -1,29 +1,32 @@
 """FastAPI entry point for the trusted local coding-agent API."""
 
 from contextlib import asynccontextmanager
-from dataclasses import replace
 
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from loguru import logger
 
-from src.agents import create_coding_agent
+from src.agents import AgentSettings, create_coding_agent
+from src.logger import configure_logging
 from src.routes.runs import router
-from src.services.coding_agent import (
-    CodingAgentService,
-    InvalidApproval,
-    InvalidSourceFolder,
-    RunConflict,
-    RunNotFound,
-)
+from src.services.coding_agent import (CodingAgentService, InvalidApproval,
+                                       InvalidSourceFolder, RunConflict,
+                                       RunNotFound)
 from src.services.events import InvalidCursor, ReplayExpired
 from src.services.tracing import create_tracing
-from src.settings import ServerSettings
+from src.settings import settings
+
+configure_logging(
+    log_level=settings.log_level,
+    log_dir=settings.log_dir,
+    app_name=settings.app_name,
+    json_logs=settings.log_json,
+)
 
 
 def create_app(
     service: CodingAgentService | None = None,
-    settings: ServerSettings | None = None,
 ) -> FastAPI:
     """Create the app, optionally injecting dependencies for offline tests."""
 
@@ -32,28 +35,31 @@ def create_app(
         active_service = service
         tracing = None
         if active_service is None:
-            config = settings or ServerSettings()
-            # LangChain provider integrations read their standard environment keys.
-            config.configure_provider_environment()
-            base_settings = config.agent_settings()
-            tracing = create_tracing(config)
+            tracing = create_tracing()
+            agent_settings = AgentSettings(
+                workspace_root=settings.coding_workspace_root,
+                model=settings.coding_model,
+                max_remediation_cycles=settings.coding_max_remediation_cycles,
+                shell_timeout_seconds=settings.coding_shell_timeout_seconds,
+            )
             active_service = CodingAgentService(
-                lambda root: create_coding_agent(
-                    replace(base_settings, workspace_root=root, checkpointer=None)
-                ),
+                lambda root: create_coding_agent(settings=agent_settings),
                 callback_factory=tracing.callback_factory if tracing else None,
             )
         app.state.coding_agent_service = active_service
         app.state.ready = True
+        logger.info("Coding agent application startup completed")
         try:
             yield
         finally:
             app.state.ready = False
+            logger.info("Coding agent application shutdown started")
             try:
                 await active_service.close()
             finally:
                 if tracing is not None:
                     await tracing.close()
+                logger.info("Coding agent application shutdown completed")
 
     app = FastAPI(title="Coding Agent API", lifespan=lifespan)
     app.state.ready = False

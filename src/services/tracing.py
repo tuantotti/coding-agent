@@ -9,7 +9,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import merge_configs
 
-from src.settings import ServerSettings
+from src.settings import settings
 
 
 class TracingClient(Protocol):
@@ -32,18 +32,40 @@ class LangfuseTracing:
         await asyncio.to_thread(self.client.shutdown)
 
 
-def create_tracing(settings: ServerSettings) -> LangfuseTracing | None:
-    """Initialize the SDK at startup using the configured environment."""
+def create_tracing() -> LangfuseTracing | None:
+    """Initialize Langfuse tracing from application settings."""
+
     if not settings.langfuse_tracing_enabled:
         return None
+
+    if not settings.langfuse_public_key:
+        raise RuntimeError(
+            "LANGFUSE_PUBLIC_KEY is required when Langfuse tracing is enabled."
+        )
+
+    if not settings.langfuse_secret_key:
+        raise RuntimeError(
+            "LANGFUSE_SECRET_KEY is required when Langfuse tracing is enabled."
+        )
+
     try:
-        from langfuse import get_client
+        from langfuse import Langfuse
         from langfuse.langchain import CallbackHandler
     except ImportError as exc:
         raise RuntimeError(
-            "Langfuse tracing requires the langfuse dependency; run uv sync."
+            "Langfuse tracing requires the langfuse dependency; run `uv sync`."
         ) from exc
-    return LangfuseTracing(get_client(), CallbackHandler)
+
+    client = Langfuse(
+        public_key=settings.langfuse_public_key.get_secret_value(),
+        secret_key=settings.langfuse_secret_key.get_secret_value(),
+        base_url=settings.langfuse_base_url,
+    )
+
+    return LangfuseTracing(
+        client,
+        CallbackHandler,
+    )
 
 
 def with_tracing_callback(

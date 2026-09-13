@@ -1,7 +1,6 @@
 """Manage serialized, resumable background runs."""
 
 import asyncio
-import logging
 from collections.abc import Callable, MutableMapping
 from pathlib import Path
 from typing import Any
@@ -11,6 +10,7 @@ from jsonschema import ValidationError, validate
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
+from loguru import logger
 
 from src.models.runs import (
     PendingApproval,
@@ -23,8 +23,6 @@ from src.services.events import EventLog
 from src.services.graph_stream import AgentGraph, GraphStream
 from src.services.tracing import with_tracing_callback
 from src.tools.approval import include_argument_schemas
-
-logger = logging.getLogger(__name__)
 
 
 class InvalidSourceFolder(ValueError):
@@ -90,6 +88,9 @@ class CodingAgentService:
             run = Run(run_id=str(uuid4()), source_folder=root)
             self._store[run.run_id] = run
             self._events[run.run_id] = EventLog(run.run_id)
+            logger.info(
+                "Coding run accepted run_id={} status={}", run.run_id, run.status
+            )
             await self._events[run.run_id].publish("status", {"status": run.status})
             self._schedule(
                 run.run_id, {"messages": [{"role": "user", "content": task}]}
@@ -140,6 +141,7 @@ class CodingAgentService:
             run.approvals = []
             run.updated_at = utc_now()
             self._store[run_id] = run
+            logger.info("Coding run resumed run_id={} status={}", run_id, run.status)
             await self._events[run_id].publish("status", {"status": run.status})
             self._schedule(run_id, Command(resume=payload))
             return self.get(run_id)
@@ -153,6 +155,9 @@ class CodingAgentService:
         run = self._store[run_id]
         run.status = "running"
         run.updated_at = utc_now()
+        logger.info(
+            "Coding run execution started run_id={} status={}", run_id, run.status
+        )
         events = self._events[run_id]
         try:
             await events.publish("status", {"status": run.status})
@@ -182,6 +187,11 @@ class CodingAgentService:
                     for item in interrupts
                 ]
                 run.status = "awaiting_approval"
+                logger.info(
+                    "Coding run approval requested run_id={} status={}",
+                    run_id,
+                    run.status,
+                )
                 await events.publish(
                     "approval_required",
                     {
@@ -195,15 +205,20 @@ class CodingAgentService:
             else:
                 run.output = stream.output()
                 run.status = "completed"
+                logger.info(
+                    "Coding run completed run_id={} status={}", run_id, run.status
+                )
         except asyncio.CancelledError:
             run.status = "failed"
             run.error = "Run stopped during application shutdown."
+            logger.info("Coding run cancelled run_id={} status={}", run_id, run.status)
             raise
-        except Exception:
+        except Exception as e:
             # Provider exceptions can contain secrets; never include their text.
-            logger.error("Coding run %s failed", run_id)
             run.status = "failed"
             run.error = "Agent execution failed."
+            logger.error(e)
+            logger.error("Coding run failed run_id={} status={}", run_id, run.status)
         finally:
             run.updated_at = utc_now()
             self._store[run_id] = run
@@ -220,6 +235,7 @@ class CodingAgentService:
 
     async def close(self) -> None:
         """Stop accepting work and await cancellation of tracked jobs."""
+        logger.info("Coding agent shutdown started")
         async with self._lock:
             self._closed = True
             tasks = tuple(self._tasks)
@@ -232,6 +248,11 @@ class CodingAgentService:
                 run.error = "Run stopped during application shutdown."
                 run.updated_at = utc_now()
                 self._graphs.pop(run.run_id, None)
+                logger.info(
+                    "Coding run cancelled during shutdown run_id={} status={}",
+                    run.run_id,
+                    run.status,
+                )
                 await self._events[run.run_id].publish(
                     "failed",
                     {
@@ -239,3 +260,4 @@ class CodingAgentService:
                         "error": run.error,
                     },
                 )
+        logger.info("Coding agent shutdown completed")
