@@ -1,5 +1,5 @@
 """Tools owned by the coding-agent project."""
 
-from tools.web_search import create_tavily_search_tool
+from src.tools.web_search import create_tavily_search_tool
 
 __all__ = ["create_tavily_search_tool"]

@@ -2,11 +2,12 @@
 
 import os
 from pathlib import Path
+from typing import Self
 
-from pydantic import DirectoryPath, Field, SecretStr
+from pydantic import DirectoryPath, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from agents import AgentSettings
+from src.agents import AgentSettings
 
 
 class ServerSettings(BaseSettings):
@@ -31,6 +32,20 @@ class ServerSettings(BaseSettings):
     langsmith_endpoint: str | None = None
     langsmith_api_key: SecretStr | None = None
     langsmith_project: str | None = None
+    langfuse_tracing_enabled: bool = False
+    langfuse_public_key: SecretStr | None = None
+    langfuse_secret_key: SecretStr | None = None
+    langfuse_base_url: str = Field(default="https://cloud.langfuse.com", min_length=1)
+
+    @model_validator(mode="after")
+    def validate_tracing_credentials(self) -> Self:
+        """Require nonblank credentials only when tracing is enabled."""
+        if self.langfuse_tracing_enabled:
+            for name in ("langfuse_public_key", "langfuse_secret_key"):
+                value = getattr(self, name)
+                if value is None or not value.get_secret_value().strip():
+                    raise ValueError(f"{name.upper()} is required for Langfuse tracing")
+        return self
 
     def configure_provider_environment(self) -> None:
         """Expose resolved provider settings to LangChain and LangSmith SDKs.
@@ -48,6 +63,10 @@ class ServerSettings(BaseSettings):
             "langsmith_endpoint",
             "langsmith_api_key",
             "langsmith_project",
+            "langfuse_tracing_enabled",
+            "langfuse_public_key",
+            "langfuse_secret_key",
+            "langfuse_base_url",
         ):
             value = getattr(self, name)
             if value is None:

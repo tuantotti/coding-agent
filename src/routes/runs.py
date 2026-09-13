@@ -6,9 +6,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import StreamingResponse
 
-from models.runs import ResumeRun, Run, StartRun
-from services.coding_agent import CodingAgentService
-from services.events import InvalidCursor, ReplayExpired
+from src.models.runs import ResumeRun, Run, StartRun
+from src.services.coding_agent import CodingAgentService
+from src.services.events import InvalidCursor, ReplayExpired
 
 router = APIRouter(prefix="/v1/runs", tags=["runs"])
 

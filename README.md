@@ -13,7 +13,9 @@ Requires Python 3.12+ and uv.
 uv sync --all-groups
 cp .env.example .env
 # Configure your model provider and TAVILY_API_KEY in .env.
-uv run uvicorn main:app --app-dir src --host 127.0.0.1 --port 8000 --workers 1
+uv run uvicorn src.main:app --host 127.0.0.1 --port 8000 --workers 1
+# Or, after activating the virtual environment:
+python -m src.main
 ```
 
 Interactive API documentation: http://127.0.0.1:8000/docs.
@@ -34,6 +36,33 @@ checkpointer, retained across approval pauses. Importing
 Environment variables override .env. Model deployment availability depends on
 your provider account. API clients select their source folder but cannot
 override model credentials.
+
+## Optional Langfuse tracing
+
+After installing dependencies, configure these server environment variables
+(or put them in `.env`) and restart:
+
+```dotenv
+LANGFUSE_TRACING_ENABLED=true
+LANGFUSE_PUBLIC_KEY=pk-lf-your-public-key
+LANGFUSE_SECRET_KEY=sk-lf-your-secret-key
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+```
+
+Tracing defaults to disabled. Both keys are required when enabled. Set the base
+URL to your Langfuse region or self-hosted instance. LangSmith remains independent
+and can be enabled alongside Langfuse.
+
+Each initial graph execution and approval resume gets a fresh callback and trace;
+all traces for a run share its `run_id` as the Langfuse session ID. Callbacks
+propagate to delegated agents and tools without changing SSE or approvals.
+Shutdown stops agent jobs before flushing queued traces off the event loop.
+
+The [standard Langfuse callback](https://langfuse.com/integrations/frameworks/langchain)
+captures available model/tool inputs and outputs, which may include source code,
+prompts, command output, and sensitive data. Enable it only when exporting this
+workspace data to your configured Langfuse instance is acceptable. No custom
+redaction is applied.
 
 ## Submit and poll
 
@@ -169,8 +198,9 @@ Failures do not roll back changes already approved and executed.
 
 ## Python usage and testing
 
-With `src` on PYTHONPATH, use `from agents import AgentSettings,
-create_coding_agent`. The factory returns a compiled graph; supply a stable
+Run Python from the project root and import
+`AgentSettings` and `create_coding_agent` from `src.agents`. The factory returns
+a compiled graph; supply a stable
 `configurable.thread_id` for invocation and LangGraph `Command(resume=...)`
 for direct approval handling. The service uses each run ID as its thread ID.
 Its Python interface now takes a graph factory accepting a resolved `Path`,

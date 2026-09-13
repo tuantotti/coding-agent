@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, JsonValue
 
-from models.runs import utc_now
+from src.models.runs import utc_now
 
 EventKind = Literal[
     "status",

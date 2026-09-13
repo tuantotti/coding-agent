@@ -4,9 +4,9 @@ from deepagents import SubAgent
 from deepagents.backends.protocol import BackendProtocol
 from langchain_core.language_models import BaseChatModel
 
-from agents.config import READ_ONLY_PERMISSIONS, READ_TOOLS, filesystem_middleware
-from prompts import load_prompt
-from tools.web_search import create_tavily_search_tool
+from src.agents.config import READ_ONLY_PERMISSIONS, READ_TOOLS, filesystem_middleware
+from src.prompts import load_prompt
+from src.tools.web_search import create_tavily_search_tool
 
 
 def create_information_retriever_subagent(

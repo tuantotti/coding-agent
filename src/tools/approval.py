@@ -7,7 +7,7 @@ from deepagents.middleware.filesystem import (
     WriteFileSchema,
 )
 
-from models.runs import PendingApproval
+from src.models.runs import PendingApproval
 
 _TOOL_SCHEMAS = {
     "write_file": WriteFileSchema,

@@ -8,18 +8,21 @@ from typing import Any
 from uuid import uuid4
 
 from jsonschema import ValidationError, validate
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
-from models.runs import (
+from src.models.runs import (
     PendingApproval,
     ResumeRun,
     Run,
     resolve_source_folder,
     utc_now,
 )
-from services.events import EventLog
-from services.graph_stream import AgentGraph, GraphStream
-from tools.approval import include_argument_schemas
+from src.services.events import EventLog
+from src.services.graph_stream import AgentGraph, GraphStream
+from src.services.tracing import with_tracing_callback
+from src.tools.approval import include_argument_schemas
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +50,12 @@ class CodingAgentService:
         self,
         graph_factory: Callable[[Path], AgentGraph],
         store: MutableMapping[str, Run] | None = None,
+        *,
+        callback_factory: Callable[[], BaseCallbackHandler] | None = None,
     ) -> None:
         """Inject a per-workspace graph factory and optional run store."""
         self._graph_factory = graph_factory
+        self._callback_factory = callback_factory
         self._graphs: dict[str, AgentGraph] = {}
         self._events: dict[str, EventLog] = {}
         self._store = store if store is not None else {}
@@ -155,10 +161,16 @@ class CodingAgentService:
                     self._graph_factory, run.source_folder
                 )
             stream = GraphStream()
+            config: RunnableConfig = {
+                "configurable": {"thread_id": run_id},
+                "recursion_limit": 200,
+            }
+            if self._callback_factory is not None:
+                config = with_tracing_callback(config, self._callback_factory(), run_id)
             async for kind, data in stream.events(
                 self._graphs[run_id],
                 input,
-                {"configurable": {"thread_id": run_id}, "recursion_limit": 200},
+                config,
             ):
                 await events.publish(kind, data)
             interrupts = stream.interrupts.values()

@@ -4,8 +4,8 @@ from deepagents import SubAgent
 from deepagents.backends.protocol import BackendProtocol
 from langchain_core.language_models import BaseChatModel
 
-from agents.config import WRITE_WITH_APPROVAL_PERMISSIONS, filesystem_middleware
-from prompts import load_prompt
+from src.agents.config import WRITE_WITH_APPROVAL_PERMISSIONS, filesystem_middleware
+from src.prompts import load_prompt
 
 
 def create_programmer_subagent(

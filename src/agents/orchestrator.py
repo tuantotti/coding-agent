@@ -10,12 +10,12 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
 
-from agents.config import READ_ONLY_PERMISSIONS, READ_TOOLS, filesystem_middleware
-from agents.information_retriever import create_information_retriever_subagent
-from agents.programmer import create_programmer_subagent
-from agents.reviewer import create_reviewer_subagent
-from agents.tester import create_tester_subagent
-from prompts import load_prompt
+from src.agents.config import READ_ONLY_PERMISSIONS, READ_TOOLS, filesystem_middleware
+from src.agents.information_retriever import create_information_retriever_subagent
+from src.agents.programmer import create_programmer_subagent
+from src.agents.reviewer import create_reviewer_subagent
+from src.agents.tester import create_tester_subagent
+from src.prompts import load_prompt
 
 _SKILLS_ROOT = Path(__file__).resolve().parents[1] / "skills"
 _APPROVAL_TOOLS = {

@@ -3,20 +3,22 @@
 from contextlib import asynccontextmanager
 from dataclasses import replace
 
+import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from agents import create_coding_agent
-from routes.runs import router
-from services.coding_agent import (
+from src.agents import create_coding_agent
+from src.routes.runs import router
+from src.services.coding_agent import (
     CodingAgentService,
     InvalidApproval,
     InvalidSourceFolder,
     RunConflict,
     RunNotFound,
 )
-from services.events import InvalidCursor, ReplayExpired
-from settings import ServerSettings
+from src.services.events import InvalidCursor, ReplayExpired
+from src.services.tracing import create_tracing
+from src.settings import ServerSettings
 
 
 def create_app(
