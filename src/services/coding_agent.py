@@ -213,11 +213,10 @@ class CodingAgentService:
             run.error = "Run stopped during application shutdown."
             logger.info("Coding run cancelled run_id={} status={}", run_id, run.status)
             raise
-        except Exception as e:
+        except Exception:
             # Provider exceptions can contain secrets; never include their text.
             run.status = "failed"
             run.error = "Agent execution failed."
-            logger.error(e)
             logger.error("Coding run failed run_id={} status={}", run_id, run.status)
         finally:
             run.updated_at = utc_now()

@@ -10,17 +10,19 @@ from loguru import logger
 from src.agents import AgentSettings, create_coding_agent
 from src.logger import configure_logging
 from src.routes.runs import router
-from src.services.coding_agent import (CodingAgentService, InvalidApproval,
-                                       InvalidSourceFolder, RunConflict,
-                                       RunNotFound)
+from src.services.coding_agent import (
+    CodingAgentService,
+    InvalidApproval,
+    InvalidSourceFolder,
+    RunConflict,
+    RunNotFound,
+)
 from src.services.events import InvalidCursor, ReplayExpired
 from src.services.tracing import create_tracing
 from src.settings import settings
 
 configure_logging(
     log_level=settings.log_level,
-    log_dir=settings.log_dir,
-    app_name=settings.app_name,
     json_logs=settings.log_json,
 )
 
