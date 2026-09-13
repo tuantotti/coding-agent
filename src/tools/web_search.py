@@ -7,6 +7,8 @@ from typing import Any
 
 from langchain_core.tools import StructuredTool
 
+from src.settings import settings
+
 
 class TavilyConfigurationError(RuntimeError):
     """Raised when web research is requested without Tavily credentials."""
@@ -39,16 +41,28 @@ def normalize_tavily_results(response: Any) -> list[dict[str, str]]:
 def _make_tavily_search(max_results: int) -> Any:
     try:
         from langchain_tavily import TavilySearch
+        from langchain_tavily.tavily_search import TavilySearchAPIWrapper
     except ImportError as exc:  # pragma: no cover
         raise TavilyConfigurationError(
-            "Tavily support is unavailable. Install the langchain-tavily dependency."
+            "Tavily support is unavailable. "
+            "Install the `langchain-tavily` dependency."
         ) from exc
-    return TavilySearch(max_results=max_results)
+
+    api_key = settings.tavily_api_key.get_secret_value()
+
+    api_wrapper = TavilySearchAPIWrapper(
+        tavily_api_key=api_key,
+    )
+
+    return TavilySearch(
+        max_results=max_results,
+        api_wrapper=api_wrapper,
+    )
 
 
 def create_tavily_search_tool(max_results: int = 5) -> StructuredTool:
     """Create the research tool, failing early when Tavily is not configured."""
-    if not os.getenv("TAVILY_API_KEY"):
+    if not settings.tavily_api_key:
         raise TavilyConfigurationError(
             "TAVILY_API_KEY is required to create the information-retrieval agent."
         )
