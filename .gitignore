@@ -229,6 +229,8 @@ __pycache__/
 thang_docs/
 ui/node_modules/
 ui/dist/
+ui/tsconfig.tsbuildinfo
+ui/package-lock.json
 **/.env
 **/.env.local
 **/.env.production

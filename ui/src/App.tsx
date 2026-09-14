@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { ApprovalCard } from "./components/ApprovalCard";
 import { ChatArea } from "./components/ChatArea";
+import { EmptyState } from "./components/EmptyState";
+import { InputCard } from "./components/InputCard";
 import { RunStatusBadge } from "./components/RunStatusBadge";
 import { Sidebar, type RunSummary } from "./components/Sidebar";
-import { TaskBar } from "./components/TaskBar";
 import { useRunStream } from "./hooks/useRunStream";
 import { api } from "./services/api";
 import type { ResumeRunRequest } from "./services/api";
@@ -27,6 +28,7 @@ export function App() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [prefill, setPrefill] = useState("");
 
   const activeRun = runs.find((r) => r.run_id === activeRunId) ?? null;
   const stream = useRunStream(activeRunId);
@@ -42,14 +44,10 @@ export function App() {
     setApiError(null);
     try {
       const run = await api.startRun({ task, source_folder: sourceFolder });
-      const record: RunRecord = {
-        run_id: run.run_id,
-        task,
-        sourceFolder,
-        startedAt: new Date(),
-      };
+      const record: RunRecord = { run_id: run.run_id, task, sourceFolder, startedAt: new Date() };
       setRuns((prev) => [record, ...prev]);
       setActiveRunId(run.run_id);
+      setPrefill("");
     } catch (e) {
       setApiError(e instanceof Error ? e.message : "Failed to start run");
     } finally {
@@ -60,31 +58,29 @@ export function App() {
   const handleResume = async (req: ResumeRunRequest) => {
     if (!activeRunId) return;
     setApiError(null);
-    try {
-      await api.resumeRun(activeRunId, req);
-    } catch (e) {
-      setApiError(e instanceof Error ? e.message : "Failed to submit decisions");
-    }
+    try { await api.resumeRun(activeRunId, req); }
+    catch (e) { setApiError(e instanceof Error ? e.message : "Failed to submit"); }
   };
 
   const handleNewRun = () => {
     setActiveRunId(null);
     setApiError(null);
+    setPrefill("");
     stream.close();
+  };
+
+  const handleChipClick = (text: string) => {
+    setPrefill(text);
   };
 
   const sidebarRuns: RunSummary[] = runs.map((r) => ({
     run_id: r.run_id,
-    label: r.task.length > 36 ? r.task.slice(0, 36) + "…" : r.task,
+    label: r.task.length > 34 ? r.task.slice(0, 34) + "…" : r.task,
     status: r.run_id === activeRunId ? stream.status : "idle",
     time: relativeTime(r.startedAt),
   }));
 
-  const topbarTitle = activeRun
-    ? activeRun.task.length > 60
-      ? activeRun.task.slice(0, 60) + "…"
-      : activeRun.task
-    : null;
+  const hasActiveRun = !!activeRun;
 
   return (
     <div className="app-shell">
@@ -96,72 +92,83 @@ export function App() {
       />
 
       <div className="main-area">
-        {/* Top bar */}
+        {/* Topbar */}
         <div className="topbar">
-          {topbarTitle ? (
-            <>
-              <span className="topbar-title">{topbarTitle}</span>
-              <RunStatusBadge status={stream.status} />
-            </>
-          ) : (
-            <span className="topbar-title topbar-empty">New run</span>
-          )}
+          <div className="topbar-left">
+            <div className="model-chip">
+              <span className="model-chip-dot" />
+              GPT-5.4 nano
+              <span style={{ color: "var(--text-faint)", fontSize: 11 }}>▾</span>
+            </div>
+            {hasActiveRun && (
+              <div className="topbar-status">
+                <RunStatusBadge status={stream.status} />
+              </div>
+            )}
+          </div>
+          <div className="topbar-right">
+            <button className="topbar-btn">⚙ Configuration</button>
+            <button className="topbar-btn">↑ Export</button>
+          </div>
         </div>
 
         {/* Error */}
         {apiError && (
-          <div className="error-toast">
-            <span>⚠️</span>
-            {apiError}
-          </div>
+          <div className="error-toast"><span>⚠</span>{apiError}</div>
         )}
 
-        {/* Chat area */}
-        <ChatArea
-          task={activeRun?.task ?? null}
-          sourceFolder={activeRun?.sourceFolder ?? null}
-          events={stream.events}
-        />
+        {/* Content */}
+        {!hasActiveRun ? (
+          /* ── Empty state: orb + chips + input + agent cards ── */
+          <div className="empty-state">
+            <div className="orb" />
+            <div className="empty-heading">Ready to Code Something New?</div>
 
-        {/* Inline approval card — injected above task bar */}
-        {stream.approvals.length > 0 && (
-          <div style={{ padding: "0 24px 12px" }}>
-            <ApprovalCard
-              approvals={stream.approvals}
-              onSubmit={handleResume}
-              disabled={stream.status !== "awaiting_approval"}
-            />
-          </div>
-        )}
+            <EmptyState onChipClick={handleChipClick} />
 
-        {/* Output */}
-        {stream.output && (
-          <div style={{ padding: "0 24px 12px" }}>
-            <div
-              style={{
-                background: "#f0fdf4",
-                border: "1px solid #86efac",
-                borderLeft: "4px solid #16a34a",
-                borderRadius: "var(--radius-md)",
-                padding: "12px 16px",
-              }}
-            >
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#166534", marginBottom: 6 }}>
-                ✅ Final output
-              </div>
-              <pre style={{ margin: 0, fontSize: 13, whiteSpace: "pre-wrap", color: "#15803d" }}>
-                {stream.output}
-              </pre>
+            <div style={{ width: "100%", maxWidth: 740 }}>
+              <InputCard
+                onSubmit={handleStart}
+                disabled={isRunning}
+                initialTask={prefill}
+                variant="center"
+              />
             </div>
           </div>
-        )}
+        ) : (
+          /* ── Active run: chat + approval + input bar ── */
+          <>
+            <ChatArea
+              task={activeRun.task}
+              sourceFolder={activeRun.sourceFolder}
+              events={stream.events}
+            />
 
-        {/* Task bar */}
-        <TaskBar
-          onSubmit={handleStart}
-          disabled={isRunning}
-          defaultFolder={activeRun?.sourceFolder}
-        />
+            {stream.approvals.length > 0 && (
+              <div style={{ padding: "0 24px 10px" }}>
+                <ApprovalCard
+                  approvals={stream.approvals}
+                  onSubmit={handleResume}
+                  disabled={stream.status !== "awaiting_approval"}
+                />
+              </div>
+            )}
+
+            {stream.output && (
+              <div className="output-card">
+                <div className="output-card-title">✅ Final output</div>
+                <pre>{stream.output}</pre>
+              </div>
+            )}
+
+            <InputCard
+              onSubmit={handleStart}
+              disabled={isRunning}
+              defaultFolder={activeRun.sourceFolder}
+              variant="bottom"
+            />
+          </>
+        )}
       </div>
     </div>
   );
