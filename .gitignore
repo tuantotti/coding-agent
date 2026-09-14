@@ -227,6 +227,7 @@ __pycache__/
 .ruff_cache/
 
 thang_docs/
+.mutmut-cache
 ui/node_modules/
 ui/dist/
 ui/tsconfig.tsbuildinfo
