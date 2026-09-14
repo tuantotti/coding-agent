@@ -40,11 +40,11 @@ def _make_completed(returncode: int = 0, stdout: str = "", stderr: str = "") -> 
 
 class TestCheckMutmut:
     def test_returns_true_when_mutmut_present(self):
-        with patch.object(rm, "_run", return_value=_make_completed(0, "mutmut 2.4.5")):
+        with patch("importlib.util.find_spec", return_value=MagicMock()):
             assert rm._check_mutmut() is True
 
     def test_returns_false_when_mutmut_missing(self):
-        with patch.object(rm, "_run", return_value=_make_completed(1)):
+        with patch("importlib.util.find_spec", return_value=None):
             assert rm._check_mutmut() is False
 
 

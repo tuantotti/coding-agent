@@ -32,8 +32,8 @@ def _run(cmd: list[str], cwd: str | None = None, timeout: int = 300) -> subproce
 
 
 def _check_mutmut() -> bool:
-    result = _run([sys.executable, "-m", "mutmut", "--version"])
-    return result.returncode == 0
+    import importlib.util
+    return importlib.util.find_spec("mutmut") is not None
 
 
 def _baseline_run(tests_path: str, runner: str) -> tuple[bool, str]:
@@ -88,29 +88,20 @@ def _run_mutmut(src_path: str, tests_path: str, runner: str, timeout: int, proje
     ]
     result = _run(cmd, cwd=project_root, timeout=timeout * 50)
 
+    import re
+
     total = killed = survived = timed_out = 0
+    # mutmut 2.x spinner format: "6/6  KILLED 3  TIMEOUT 0  SUSPICIOUS 0  SURVIVED 3  SKIPPED 0"
+    _PROGRESS = re.compile(
+        r"(\d+)/(\d+)\s+KILLED\s+(\d+)\s+TIMEOUT\s+(\d+).*?SURVIVED\s+(\d+)"
+    )
     for line in (result.stdout + result.stderr).splitlines():
-        line = line.strip()
-        if "to test" in line:
-            try:
-                total = int(line.split()[0])
-            except (ValueError, IndexError):
-                pass
-        elif line.startswith("Killed"):
-            try:
-                killed = int(line.split()[1])
-            except (ValueError, IndexError):
-                pass
-        elif line.startswith("Survived"):
-            try:
-                survived = int(line.split()[1])
-            except (ValueError, IndexError):
-                pass
-        elif line.startswith("Timeout"):
-            try:
-                timed_out = int(line.split()[1])
-            except (ValueError, IndexError):
-                pass
+        m = _PROGRESS.search(line)
+        if m:
+            total = int(m.group(2))
+            killed = int(m.group(3))
+            timed_out = int(m.group(4))
+            survived = int(m.group(5))
 
     surviving_detail = _parse_mutmut_results(project_root)
     killed_ratio = killed / total if total > 0 else 0.0
