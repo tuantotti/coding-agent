@@ -1,3 +1,4 @@
+import { Archive, BookOpen, MessageSquare, PanelLeftClose, Plus, Sparkles } from "lucide-react";
 import type { RunStatus } from "../hooks/useRunStream";
 
 export interface RunSummary {
@@ -14,19 +15,22 @@ interface Props {
   onNewRun: () => void;
 }
 
-const STATUS_ICON: Record<RunStatus, string> = {
-  idle: "○", queued: "◔", running: "◑",
-  awaiting_approval: "◐", completed: "✓", failed: "✕",
-};
 const STATUS_COLOR: Record<RunStatus, string> = {
   idle: "var(--text-faint)", queued: "#fbbf24", running: "#60a5fa",
   awaiting_approval: "#c4b5fd", completed: "#4ade80", failed: "#f87171",
 };
 
+const StatusDot = ({ status }: { status: RunStatus }) => (
+  <span style={{
+    width: 6, height: 6, borderRadius: "50%",
+    background: STATUS_COLOR[status], display: "inline-block", flexShrink: 0,
+  }} />
+);
+
 const NAV_ITEMS = [
-  { icon: "💬", label: "Chat" },
-  { icon: "📦", label: "Archived" },
-  { icon: "📚", label: "Library" },
+  { icon: <MessageSquare size={14} />, label: "Chat" },
+  { icon: <Archive size={14} />, label: "Archived" },
+  { icon: <BookOpen size={14} />, label: "Library" },
 ];
 
 export function Sidebar({ runs, activeRunId, onSelect, onNewRun }: Props) {
@@ -35,15 +39,19 @@ export function Sidebar({ runs, activeRunId, onSelect, onNewRun }: Props) {
       {/* Header */}
       <div className="sidebar-header">
         <div className="sidebar-brand">
-          <div className="sidebar-logo">🤖</div>
+          <div className="sidebar-logo">
+            <Sparkles size={14} />
+          </div>
           <span className="sidebar-name">Seminar2</span>
         </div>
-        <button className="sidebar-collapse-btn" title="Collapse">⊟</button>
+        <button className="sidebar-collapse-btn" title="Collapse">
+          <PanelLeftClose size={13} />
+        </button>
       </div>
 
       {/* New run */}
       <button className="sidebar-new-btn" onClick={onNewRun}>
-        <span style={{ fontSize: 16, lineHeight: 1 }}>⊕</span>
+        <Plus size={15} />
         New Run
       </button>
 
@@ -69,8 +77,8 @@ export function Sidebar({ runs, activeRunId, onSelect, onNewRun }: Props) {
                 className={`sidebar-item${activeRunId === run.run_id ? " active" : ""}`}
                 onClick={() => onSelect(run.run_id)}
               >
-                <span className="sidebar-item-icon" style={{ color: STATUS_COLOR[run.status] }}>
-                  {STATUS_ICON[run.status]}
+                <span className="sidebar-item-icon">
+                  <StatusDot status={run.status} />
                 </span>
                 <span className="sidebar-item-label">{run.label}</span>
                 <span className="sidebar-item-time">{run.time}</span>
@@ -82,10 +90,12 @@ export function Sidebar({ runs, activeRunId, onSelect, onNewRun }: Props) {
 
       {/* Bottom info card */}
       <div className="sidebar-bottom">
-        <div className="sidebar-bottom-icon">✨</div>
+        <div className="sidebar-bottom-icon">
+          <Sparkles size={18} />
+        </div>
         <div className="sidebar-bottom-title">MAS for SE</div>
         <div className="sidebar-bottom-desc">
-          Multi-agent system for code generation, testing & review.
+          Multi-agent system for code generation, testing &amp; review.
         </div>
         <button className="sidebar-bottom-btn">View Architecture</button>
       </div>

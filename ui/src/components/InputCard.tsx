@@ -1,3 +1,4 @@
+import { ArrowUp, FolderOpen, Paperclip, Settings2, LayoutGrid, Sparkles, AlertCircle } from "lucide-react";
 import { useRef, useState } from "react";
 
 interface Props {
@@ -5,7 +6,6 @@ interface Props {
   disabled: boolean;
   initialTask?: string;
   defaultFolder?: string;
-  /** When true, renders inside the empty-state (centered), otherwise bottom bar */
   variant?: "center" | "bottom";
 }
 
@@ -74,7 +74,7 @@ export function InputCard({
     <div className="input-card">
       {/* Folder row */}
       <div className="input-card-folder">
-        <span className="input-card-folder-icon">📁</span>
+        <span className="input-card-folder-icon"><FolderOpen size={13} /></span>
         <input
           className="input-card-folder-path"
           type="text"
@@ -84,12 +84,7 @@ export function InputCard({
           disabled={disabled}
           style={folderError ? { color: "#f87171" } : {}}
         />
-        <button
-          className="input-card-browse"
-          onClick={handleBrowse}
-          disabled={disabled}
-          type="button"
-        >
+        <button className="input-card-browse" onClick={handleBrowse} disabled={disabled} type="button">
           Browse…
         </button>
         <input
@@ -103,14 +98,14 @@ export function InputCard({
       </div>
 
       {folderError && (
-        <div style={{ fontSize: 11, color: "#f87171", padding: "2px 4px 4px" }}>
-          ⚠ {folderError}
+        <div style={{ fontSize: 11, color: "#f87171", padding: "2px 4px 4px", display: "flex", alignItems: "center", gap: 4 }}>
+          <AlertCircle size={11} /> {folderError}
         </div>
       )}
 
       {/* Text row */}
       <div className="input-card-row">
-        <span className="input-card-spark">✦</span>
+        <span className="input-card-spark"><Sparkles size={15} /></span>
         <textarea
           ref={textareaRef}
           className="input-card-textarea"
@@ -126,9 +121,9 @@ export function InputCard({
       {/* Toolbar */}
       <div className="input-card-toolbar">
         <div className="input-toolbar-left">
-          <button className="toolbar-icon-btn" type="button">🔗 Attach</button>
-          <button className="toolbar-icon-btn" type="button">⚙ Settings</button>
-          <button className="toolbar-icon-btn" type="button">⊞ Options</button>
+          <button className="toolbar-icon-btn" type="button"><Paperclip size={13} /> Attach</button>
+          <button className="toolbar-icon-btn" type="button"><Settings2 size={13} /> Settings</button>
+          <button className="toolbar-icon-btn" type="button"><LayoutGrid size={13} /> Options</button>
         </div>
         <div className="input-toolbar-right">
           <button
@@ -137,7 +132,7 @@ export function InputCard({
             disabled={disabled || !task.trim()}
             title="Send (⌘↵)"
           >
-            ↑
+            <ArrowUp size={15} />
           </button>
         </div>
       </div>

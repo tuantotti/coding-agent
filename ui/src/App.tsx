@@ -1,3 +1,4 @@
+import { Settings, Upload, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { ApprovalCard } from "./components/ApprovalCard";
 import { ChatArea } from "./components/ChatArea";
@@ -107,14 +108,14 @@ export function App() {
             )}
           </div>
           <div className="topbar-right">
-            <button className="topbar-btn">⚙ Configuration</button>
-            <button className="topbar-btn">↑ Export</button>
+            <button className="topbar-btn"><Settings size={13} /> Configuration</button>
+            <button className="topbar-btn"><Upload size={13} /> Export</button>
           </div>
         </div>
 
         {/* Error */}
         {apiError && (
-          <div className="error-toast"><span>⚠</span>{apiError}</div>
+          <div className="error-toast"><TriangleAlert size={14} />{apiError}</div>
         )}
 
         {/* Content */}
