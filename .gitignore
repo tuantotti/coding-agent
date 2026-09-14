@@ -227,6 +227,8 @@ __pycache__/
 .ruff_cache/
 
 thang_docs/
+ui/node_modules/
+ui/dist/
 **/.env
 **/.env.local
 **/.env.production
