@@ -23,5 +23,9 @@ def create_tester_subagent(
             )
         ],
         "permissions": READ_ONLY_PERMISSIONS,
-        "skills": ["/agent_skills/common", "/agent_skills/tester"],
+        "skills": [
+            "/agent_skills/common",
+            "/agent_skills/tester",
+            "/agent_skills/tester/mutation-testing",
+        ],
     }
