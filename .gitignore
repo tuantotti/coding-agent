@@ -225,3 +225,9 @@ __pycache__/
 .data/
 .pytest_cache/
 .ruff_cache/
+
+thang_docs/
+**/.env
+**/.env.local
+**/.env.production
+**/.env.development
