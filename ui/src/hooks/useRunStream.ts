@@ -91,7 +91,7 @@ export function useRunStream(runId: string | null) {
       if (TERMINAL.has(eventName)) close();
     };
 
-    for (const evt of ["status", "text", "activity", "approval_required", "completed", "failed"]) {
+    for (const evt of ["status", "text_delta", "agent_activity", "approval_required", "completed", "failed"]) {
       es.addEventListener(evt, (e) => handle(e as MessageEvent, evt));
     }
 

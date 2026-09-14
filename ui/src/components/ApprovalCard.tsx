@@ -67,11 +67,11 @@ export function ApprovalCard({ approvals, onSubmit, disabled }: Props) {
                 </button>
                 <button
                   className={`approval-btn deny`}
-                  style={{ opacity: current === "deny" ? 1 : 0.45 }}
-                  onClick={() => setDecision(approval.interrupt_id, idx, "deny")}
+                  style={{ opacity: current === "reject" ? 1 : 0.45 }}
+                  onClick={() => setDecision(approval.interrupt_id, idx, "reject")}
                   disabled={disabled}
                 >
-                  ❌ Deny
+                  ❌ Reject
                 </button>
               </div>
             </div>

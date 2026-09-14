@@ -18,6 +18,7 @@ export function InputCard({
 }: Props) {
   const [task, setTask] = useState(initialTask);
   const [folder, setFolder] = useState(defaultFolder);
+  const [folderError, setFolderError] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -30,7 +31,13 @@ export function InputCard({
 
   const handleSubmit = () => {
     if (!task.trim() || disabled) return;
-    onSubmit(task.trim(), folder.trim() || ".");
+    const f = folder.trim();
+    if (!f.startsWith("/")) {
+      setFolderError("Must be an absolute path (e.g. /Users/you/project)");
+      return;
+    }
+    setFolderError("");
+    onSubmit(task.trim(), f);
     setTask("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   };
@@ -72,9 +79,10 @@ export function InputCard({
           className="input-card-folder-path"
           type="text"
           value={folder}
-          onChange={(e) => setFolder(e.target.value)}
+          onChange={(e) => { setFolder(e.target.value); setFolderError(""); }}
           placeholder="/absolute/path/to/your/project"
           disabled={disabled}
+          style={folderError ? { color: "#f87171" } : {}}
         />
         <button
           className="input-card-browse"
@@ -93,6 +101,12 @@ export function InputCard({
           onChange={handleFileInput}
         />
       </div>
+
+      {folderError && (
+        <div style={{ fontSize: 11, color: "#f87171", padding: "2px 4px 4px" }}>
+          ⚠ {folderError}
+        </div>
+      )}
 
       {/* Text row */}
       <div className="input-card-row">

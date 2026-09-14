@@ -77,7 +77,7 @@ export function ApprovalPanel({ approvals, onSubmit, disabled }: Props) {
               </pre>
 
               <div style={{ display: "flex", gap: 8 }}>
-                {(["approve", "deny"] as const).map((type) => {
+                {(["approve", "reject"] as const).map((type) => {
                   const current = decisions[approval.interrupt_id]?.[idx]?.type;
                   const active = current === type;
                   return (

@@ -55,11 +55,11 @@ function eventsToMessages(
   };
 
   for (const ev of events) {
-    if (ev.event === "text" || ev.event === "activity") {
+    if (ev.event === "text_delta" || ev.event === "agent_activity") {
       const agent = (ev.agent as string | undefined) ?? "coordinator";
       if (agent !== pendingAgent) { flush(); pendingAgent = agent; }
-      const chunk = String(ev.content ?? ev.message ?? ev.text ?? "");
-      pendingAgentText += (pendingAgentText ? "\n" : "") + chunk;
+      const chunk = String(ev.content ?? ev.delta ?? ev.message ?? ev.text ?? "");
+      pendingAgentText += chunk;
     } else if (ev.event === "status") {
       flush();
       const s = String(ev.status ?? "");

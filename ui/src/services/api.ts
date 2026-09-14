@@ -35,11 +35,12 @@ export interface PendingApproval {
   review_configs: ReviewConfig[];
 }
 
-export type DecisionType = "approve" | "deny" | "edit";
+export type DecisionType = "approve" | "reject" | "edit";
 
 export interface Decision {
   type: DecisionType;
   edited_action?: ActionRequest;
+  message?: string; // optional rejection reason (for type="reject")
 }
 
 export interface ResumeRunRequest {
