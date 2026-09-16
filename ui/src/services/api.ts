@@ -71,4 +71,7 @@ export const api = {
 
   pickDir: (): Promise<{ path: string | null }> =>
     request("/v1/system/pick-dir"),
+
+  getConfig: (): Promise<{ model: string }> =>
+    request("/v1/system/config"),
 };

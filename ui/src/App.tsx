@@ -40,6 +40,11 @@ export function App() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [prefill, setPrefill] = useState("");
+  const [model, setModel] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getConfig().then((c) => setModel(c.model)).catch(() => setModel(null));
+  }, []);
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId) ?? null;
   const latestTurn = activeConversation
@@ -140,7 +145,7 @@ export function App() {
           <div className="topbar-left">
             <div className="model-chip">
               <span className="model-chip-dot" />
-              GPT-5.4 nano
+              {model ?? "…"}
               <span style={{ color: "var(--text-faint)", fontSize: 11 }}>▾</span>
             </div>
             {hasActiveRun && (

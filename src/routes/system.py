@@ -8,6 +8,8 @@ import sys
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from src.settings import settings
+
 system_router = APIRouter(prefix="/v1/system")
 
 
@@ -63,3 +65,11 @@ async def pick_directory() -> JSONResponse:
     loop = asyncio.get_event_loop()
     path = await loop.run_in_executor(None, _open_dir_dialog)
     return JSONResponse({"path": path})
+
+
+@system_router.get("/config")
+async def get_config() -> JSONResponse:
+    """Expose non-secret runtime configuration for the UI."""
+    # Strip provider prefix e.g. "azure_openai:gpt-4.1-mini" → "gpt-4.1-mini"
+    model = settings.coding_model.split(":", 1)[-1]
+    return JSONResponse({"model": model})
