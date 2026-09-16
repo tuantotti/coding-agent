@@ -1,3 +1,6 @@
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
 export type MessageKind = "user" | "agent" | "muted" | "system";
 
 export interface Message {
@@ -15,6 +18,7 @@ interface Props {
 
 export function MessageBubble({ message }: Props) {
   const { kind, sender, avatarEmoji, avatarColor, text } = message;
+  const isMarkdown = kind === "agent";
 
   return (
     <div className={`message-row ${kind === "user" ? "user" : "agent"}${kind === "muted" ? " muted" : ""}`}>
@@ -30,7 +34,15 @@ export function MessageBubble({ message }: Props) {
 
       <div className="message-content">
         <div className="message-sender">{sender}</div>
-        <div className="message-bubble">{text}</div>
+        <div className={`message-bubble${isMarkdown ? "" : " plain"}`}>
+          {isMarkdown ? (
+            <div className="markdown-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+            </div>
+          ) : (
+            text
+          )}
+        </div>
       </div>
 
       {kind === "user" && (
