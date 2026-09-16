@@ -68,4 +68,7 @@ export const api = {
 
   resumeRun: (runId: string, body: ResumeRunRequest): Promise<Run> =>
     request(`/v1/runs/${runId}/resume`, { method: "POST", body: JSON.stringify(body) }),
+
+  findDir: (name: string): Promise<{ paths: string[] }> =>
+    request(`/v1/system/find-dir?name=${encodeURIComponent(name)}`),
 };

@@ -11,6 +11,7 @@ from loguru import logger
 from src.agents import AgentSettings, create_coding_agent
 from src.logger import configure_logging
 from src.routes.runs import router
+from src.routes.system import system_router
 from src.services.coding_agent import (
     CodingAgentService,
     InvalidApproval,
@@ -69,6 +70,7 @@ def create_app(
     app = FastAPI(title="Coding Agent API", lifespan=lifespan)
     app.state.ready = False
     app.include_router(router)
+    app.include_router(system_router)
 
     @app.get("/health")
     async def health() -> JSONResponse:

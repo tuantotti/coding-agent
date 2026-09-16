@@ -1,5 +1,6 @@
-import { ArrowUp, FolderOpen, Paperclip, Settings2, LayoutGrid, Sparkles, AlertCircle, Info } from "lucide-react";
+import { ArrowUp, FolderOpen, Paperclip, Settings2, LayoutGrid, Sparkles, AlertCircle, Loader2 } from "lucide-react";
 import { useRef, useState } from "react";
+import { api } from "../services/api";
 
 interface Props {
   onSubmit: (task: string, folder: string) => void;
@@ -19,7 +20,8 @@ export function InputCard({
   const [task, setTask] = useState(initialTask);
   const [folder, setFolder] = useState(defaultFolder);
   const [folderError, setFolderError] = useState("");
-  const [browseHint, setBrowseHint] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [pathChoices, setPathChoices] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -38,7 +40,7 @@ export function InputCard({
       return;
     }
     setFolderError("");
-    setBrowseHint("");
+    setPathChoices([]);
     onSubmit(task.trim(), f);
     setTask("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -54,18 +56,27 @@ export function InputCard({
         const handle = await (
           window as unknown as { showDirectoryPicker: () => Promise<{ name: string }> }
         ).showDirectoryPicker();
-        // Browser security: only folder name is available, not full path.
-        // If current field already has an absolute base, extend it; otherwise set name and hint.
-        setFolder((prev) => {
-          const trimmed = prev.trim();
-          if (trimmed.startsWith("/")) {
-            const base = trimmed.replace(/\/?[^/]+$/, "").replace(/\/$/, "") || "";
-            return base ? `${base}/${handle.name}` : `/${handle.name}`;
-          }
-          return handle.name;
-        });
+        const name = handle.name;
+
+        // Ask backend to resolve the full path
+        setSearching(true);
         setFolderError("");
-        setBrowseHint(folder.trim().startsWith("/") ? "" : handle.name);
+        setPathChoices([]);
+        try {
+          const { paths } = await api.findDir(name);
+          if (paths.length === 1) {
+            setFolder(paths[0]);
+          } else if (paths.length > 1) {
+            setFolder(paths[0]);
+            setPathChoices(paths);
+          } else {
+            // Not found — fill name as hint, ask user to type prefix
+            setFolder(name);
+            setFolderError(`Không tìm thấy "${name}" trong home directory. Nhập đường dẫn đầy đủ.`);
+          }
+        } finally {
+          setSearching(false);
+        }
       } catch { /* cancelled */ }
     } else {
       fileInputRef.current?.click();
@@ -76,33 +87,27 @@ export function InputCard({
     const file = e.target.files?.[0];
     if (!file) return;
     const parts = (file as File & { webkitRelativePath?: string }).webkitRelativePath?.split("/");
-    if (parts?.[0]) { setFolder(parts[0]); setBrowseHint(parts[0]); }
+    if (parts?.[0]) setFolder(parts[0]);
     e.target.value = "";
   };
-
-  const handleFolderChange = (val: string) => {
-    setFolder(val);
-    setFolderError("");
-    if (val.startsWith("/")) setBrowseHint("");
-  };
-
-  const showBrowseHint = browseHint && !folder.startsWith("/");
 
   const card = (
     <div className="input-card">
       {/* Folder row */}
       <div className="input-card-folder">
-        <span className="input-card-folder-icon"><FolderOpen size={13} /></span>
+        <span className="input-card-folder-icon">
+          {searching ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <FolderOpen size={13} />}
+        </span>
         <input
           className="input-card-folder-path"
           type="text"
           value={folder}
-          onChange={(e) => handleFolderChange(e.target.value)}
+          onChange={(e) => { setFolder(e.target.value); setFolderError(""); setPathChoices([]); }}
           placeholder="/absolute/path/to/your/project"
-          disabled={disabled}
+          disabled={disabled || searching}
           style={folderError ? { color: "#f87171" } : {}}
         />
-        <button className="input-card-browse" onClick={handleBrowse} disabled={disabled} type="button">
+        <button className="input-card-browse" onClick={handleBrowse} disabled={disabled || searching} type="button">
           Browse…
         </button>
         <input
@@ -115,12 +120,29 @@ export function InputCard({
         />
       </div>
 
-      {/* Browse hint — amber info, not error */}
-      {showBrowseHint && !folderError && (
-        <div style={{ fontSize: 11, color: "#fbbf24", padding: "2px 4px 4px", display: "flex", alignItems: "center", gap: 4 }}>
-          <Info size={11} />
-          Browser chỉ đọc được tên folder. Nhập đường dẫn đầy đủ phía trước, e.g.{" "}
-          <code style={{ fontFamily: "monospace", opacity: 0.85 }}>/Users/yourname/{browseHint}</code>
+      {/* Multiple matches — let user pick */}
+      {pathChoices.length > 1 && (
+        <div style={{ fontSize: 11, padding: "4px 4px 2px" }}>
+          <span style={{ color: "var(--text-faint)", marginBottom: 4, display: "block" }}>
+            Tìm thấy {pathChoices.length} thư mục — chọn một:
+          </span>
+          {pathChoices.map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => { setFolder(p); setPathChoices([]); }}
+              style={{
+                display: "block", width: "100%", textAlign: "left",
+                padding: "3px 8px", borderRadius: 5, border: "none",
+                background: folder === p ? "var(--accent-light)" : "transparent",
+                color: folder === p ? "var(--accent-text)" : "var(--text-muted)",
+                fontFamily: "monospace", fontSize: 11, cursor: "pointer",
+                marginBottom: 2,
+              }}
+            >
+              {p}
+            </button>
+          ))}
         </div>
       )}
 
@@ -157,7 +179,7 @@ export function InputCard({
           <button
             className="send-btn"
             onClick={handleSubmit}
-            disabled={disabled || !task.trim()}
+            disabled={disabled || !task.trim() || searching}
             title="Send (⌘↵)"
           >
             <ArrowUp size={15} />

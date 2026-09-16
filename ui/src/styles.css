@@ -283,6 +283,7 @@ body {
 .status-badge.running .status-dot,
 .status-badge.queued .status-dot { animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Chat / scroll area ────────────────────────────────────── */
 .chat-area {
