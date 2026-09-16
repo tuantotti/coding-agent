@@ -4,17 +4,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from deepagents import create_deep_agent
-from deepagents.backends import (CompositeBackend, FilesystemBackend,
-                                 LocalShellBackend)
+from deepagents.backends import CompositeBackend, FilesystemBackend, LocalShellBackend
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
 
-from src.agents.config import (READ_ONLY_PERMISSIONS, READ_TOOLS,
-                               filesystem_middleware)
-from src.agents.information_retriever import \
-    create_information_retriever_subagent
+from src.agents.config import READ_ONLY_PERMISSIONS, READ_TOOLS, filesystem_middleware
+from src.agents.information_retriever import create_information_retriever_subagent
 from src.agents.programmer import create_programmer_subagent
 from src.agents.reviewer import create_reviewer_subagent
 from src.agents.tester import create_tester_subagent
@@ -45,7 +42,7 @@ class AgentSettings:
     shell_timeout_seconds: int = 120
 
     def resolved_workspace_root(self) -> Path:
-        """Return and validate the workspace root used by all file operations."""
+        """Validate the project context and shell working directory."""
         root = Path(self.workspace_root or Path.cwd()).resolve()
         if not root.is_dir():
             raise ValueError(f"workspace_root must be an existing directory: {root}")
@@ -57,7 +54,7 @@ class AgentSettings:
 
 
 def _create_backend(settings: AgentSettings, workspace_root: Path) -> CompositeBackend:
-    """Mount packaged skills read-only alongside the approved local workspace."""
+    """Expose host paths alongside the protected virtual skills mount."""
     workspace = LocalShellBackend(
         root_dir=workspace_root,
         timeout=settings.shell_timeout_seconds,
@@ -68,7 +65,7 @@ def _create_backend(settings: AgentSettings, workspace_root: Path) -> CompositeB
         default=workspace,
         routes={
             "/agent_skills/": packaged_skills,
-            "/": FilesystemBackend(root_dir=workspace_root),
+            "/": FilesystemBackend(root_dir=workspace_root, virtual_mode=False),
         },
     )
 

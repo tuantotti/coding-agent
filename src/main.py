@@ -1,6 +1,7 @@
 """FastAPI entry point for the trusted local coding-agent API."""
 
 from contextlib import asynccontextmanager
+from dataclasses import replace
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -45,7 +46,9 @@ def create_app(
                 shell_timeout_seconds=settings.coding_shell_timeout_seconds,
             )
             active_service = CodingAgentService(
-                lambda root: create_coding_agent(settings=agent_settings),
+                lambda root: create_coding_agent(
+                    settings=replace(agent_settings, workspace_root=root)
+                ),
                 callback_factory=tracing.callback_factory if tracing else None,
             )
         app.state.coding_agent_service = active_service

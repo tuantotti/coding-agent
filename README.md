@@ -23,19 +23,55 @@ Startup validates configuration. Each submitted run gets its own graph and
 checkpointer, retained across approval pauses. Importing
 `main` does not require credentials or create external clients.
 
-| Setting | Default |
-| --- | --- |
-| OPENAI_API_KEY | Required when using OpenAI |
-| AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, OPENAI_API_VERSION | Used for Azure OpenAI |
-| TAVILY_API_KEY | Required |
-| CODING_MODEL | openai:gpt-5.4 |
-| CODING_WORKSPACE_ROOT | Default for direct Python usage only |
-| CODING_MAX_REMEDIATION_CYCLES | 2 |
-| CODING_SHELL_TIMEOUT_SECONDS | 120 |
+| Setting                                                         | Default                                                    |
+| --------------------------------------------------------------- | ---------------------------------------------------------- |
+| OPENAI_API_KEY                                                  | Required when using OpenAI                                 |
+| AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, OPENAI_API_VERSION | Used for Azure OpenAI                                      |
+| TAVILY_API_KEY                                                  | Required                                                   |
+| CODING_MODEL                                                    | openai:gpt-5.4                                             |
+| CODING_WORKSPACE_ROOT                                           | Default for direct Python usage only                       |
+| CODING_MAX_REMEDIATION_CYCLES                                   | 2                                                          |
+| CODING_SHELL_TIMEOUT_SECONDS                                    | 120                                                        |
+| CODING_AGENT_API_URL                                            | http://127.0.0.1:8000 (exported terminal environment only) |
 
-Environment variables override .env. Model deployment availability depends on
-your provider account. API clients select their source folder but cannot
-override model credentials.
+Server environment variables override `.env`; the terminal-specific
+`CODING_AGENT_API_URL` exception is described below. Model deployment
+availability depends on your provider account. API clients select their source
+folder but cannot override model credentials.
+
+## Interactive terminal client
+
+Start the API separately, then connect the Rich terminal client from another
+shell. The client never starts or stops the server:
+
+```bash
+uv run python -m src.terminal \
+  --task "Review this project for bugs" \
+  --source-folder /absolute/path/on/api/server
+```
+
+Both `--task` and `--source-folder` are optional; missing values are prompted
+for interactively. Select the API with `--api-url`, then
+`CODING_AGENT_API_URL`, or the default `http://127.0.0.1:8000`, in that order.
+The terminal reads `CODING_AGENT_API_URL` from its process environment; it does
+not load `.env`. Export the value in the shell or supply `--api-url` directly.
+The `.env.example` entry is a shell-configuration example for this option.
+The source folder is interpreted and validated by the API server. The terminal
+does not check it locally or upload files, so remote projects must already be
+available to the server at the path supplied.
+
+Queued and running states, agent activity, and incremental assistant text are
+shown while the run proceeds. Approval pauses display every proposed action,
+its description, and formatted JSON arguments in server order. Each action
+must be explicitly approved, edited, or rejected; edits keep the action name
+and require a JSON object, while rejection feedback is optional. The client
+never auto-approves.
+
+If the event connection drops, the terminal makes at most three reconnects
+after 0.5, 1, and 2 seconds and resumes with the last event ID without
+redisplaying events. If replay history has expired, it polls the run once to
+recover an already completed or failed result; otherwise it reports that
+history was lost and exits unsuccessfully. Sessions are not persisted.
 
 ## Optional Langfuse tracing
 
