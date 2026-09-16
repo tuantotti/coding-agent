@@ -58,6 +58,15 @@ function turnToMessages(
     pendingAgentText = "";
   };
 
+  const markFinalOutput = () => {
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].kind === "agent") {
+        msgs[i] = { ...msgs[i], variant: "final" };
+        return;
+      }
+    }
+  };
+
   for (const ev of events) {
     if (ev.event === "text_delta" || ev.event === "agent_activity") {
       const agent = (ev.agent as string | undefined) ?? "coordinator";
@@ -81,6 +90,7 @@ function turnToMessages(
     }
   }
   flush();
+  if (events.some((ev) => ev.event === "completed")) markFinalOutput();
   return msgs;
 }
 

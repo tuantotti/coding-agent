@@ -2,6 +2,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 export type MessageKind = "user" | "agent" | "muted" | "system";
+export type MessageVariant = "final";
 
 export interface Message {
   id: string;
@@ -10,6 +11,7 @@ export interface Message {
   avatarEmoji: string;
   avatarColor: string;
   text: string;
+  variant?: MessageVariant;
 }
 
 interface Props {
@@ -17,8 +19,9 @@ interface Props {
 }
 
 export function MessageBubble({ message }: Props) {
-  const { kind, sender, avatarEmoji, avatarColor, text } = message;
+  const { kind, sender, avatarEmoji, avatarColor, text, variant } = message;
   const isMarkdown = kind === "agent";
+  const isFinal = variant === "final";
 
   return (
     <div className={`message-row ${kind === "user" ? "user" : "agent"}${kind === "muted" ? " muted" : ""}`}>
@@ -34,7 +37,8 @@ export function MessageBubble({ message }: Props) {
 
       <div className="message-content">
         <div className="message-sender">{sender}</div>
-        <div className={`message-bubble${isMarkdown ? "" : " plain"}`}>
+        <div className={`message-bubble${isMarkdown ? "" : " plain"}${isFinal ? " output-card" : ""}`}>
+          {isFinal && <div className="output-card-title">✅ Final output</div>}
           {isMarkdown ? (
             <div className="markdown-body">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
