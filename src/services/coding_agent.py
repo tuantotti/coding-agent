@@ -217,7 +217,7 @@ class CodingAgentService:
             # Provider exceptions can contain secrets; never include their text.
             run.status = "failed"
             run.error = "Agent execution failed."
-            logger.error("Coding run failed run_id={} status={}", run_id, run.status)
+            logger.exception("Coding run failed run_id={} status={}", run_id, run.status)
         finally:
             run.updated_at = utc_now()
             self._store[run_id] = run
