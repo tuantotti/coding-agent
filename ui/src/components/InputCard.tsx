@@ -1,4 +1,4 @@
-import { ArrowUp, FolderOpen, Paperclip, Settings2, LayoutGrid, Sparkles, AlertCircle } from "lucide-react";
+import { ArrowUp, FolderOpen, Paperclip, Settings2, LayoutGrid, Sparkles, AlertCircle, Info } from "lucide-react";
 import { useRef, useState } from "react";
 
 interface Props {
@@ -19,6 +19,7 @@ export function InputCard({
   const [task, setTask] = useState(initialTask);
   const [folder, setFolder] = useState(defaultFolder);
   const [folderError, setFolderError] = useState("");
+  const [browseHint, setBrowseHint] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -33,10 +34,11 @@ export function InputCard({
     if (!task.trim() || disabled) return;
     const f = folder.trim();
     if (!f.startsWith("/")) {
-      setFolderError("Must be an absolute path (e.g. /Users/you/project)");
+      setFolderError(`Must be an absolute path — e.g. /Users/yourname/${f || "project"}`);
       return;
     }
     setFolderError("");
+    setBrowseHint("");
     onSubmit(task.trim(), f);
     setTask("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -52,10 +54,18 @@ export function InputCard({
         const handle = await (
           window as unknown as { showDirectoryPicker: () => Promise<{ name: string }> }
         ).showDirectoryPicker();
+        // Browser security: only folder name is available, not full path.
+        // If current field already has an absolute base, extend it; otherwise set name and hint.
         setFolder((prev) => {
-          const base = prev.replace(/[^/\\]+$/, "").replace(/[/\\]$/, "");
-          return base ? `${base}/${handle.name}` : handle.name;
+          const trimmed = prev.trim();
+          if (trimmed.startsWith("/")) {
+            const base = trimmed.replace(/\/?[^/]+$/, "").replace(/\/$/, "") || "";
+            return base ? `${base}/${handle.name}` : `/${handle.name}`;
+          }
+          return handle.name;
         });
+        setFolderError("");
+        setBrowseHint(folder.trim().startsWith("/") ? "" : handle.name);
       } catch { /* cancelled */ }
     } else {
       fileInputRef.current?.click();
@@ -66,9 +76,17 @@ export function InputCard({
     const file = e.target.files?.[0];
     if (!file) return;
     const parts = (file as File & { webkitRelativePath?: string }).webkitRelativePath?.split("/");
-    if (parts?.[0]) setFolder(parts[0]);
+    if (parts?.[0]) { setFolder(parts[0]); setBrowseHint(parts[0]); }
     e.target.value = "";
   };
+
+  const handleFolderChange = (val: string) => {
+    setFolder(val);
+    setFolderError("");
+    if (val.startsWith("/")) setBrowseHint("");
+  };
+
+  const showBrowseHint = browseHint && !folder.startsWith("/");
 
   const card = (
     <div className="input-card">
@@ -79,7 +97,7 @@ export function InputCard({
           className="input-card-folder-path"
           type="text"
           value={folder}
-          onChange={(e) => { setFolder(e.target.value); setFolderError(""); }}
+          onChange={(e) => handleFolderChange(e.target.value)}
           placeholder="/absolute/path/to/your/project"
           disabled={disabled}
           style={folderError ? { color: "#f87171" } : {}}
@@ -97,6 +115,16 @@ export function InputCard({
         />
       </div>
 
+      {/* Browse hint — amber info, not error */}
+      {showBrowseHint && !folderError && (
+        <div style={{ fontSize: 11, color: "#fbbf24", padding: "2px 4px 4px", display: "flex", alignItems: "center", gap: 4 }}>
+          <Info size={11} />
+          Browser chỉ đọc được tên folder. Nhập đường dẫn đầy đủ phía trước, e.g.{" "}
+          <code style={{ fontFamily: "monospace", opacity: 0.85 }}>/Users/yourname/{browseHint}</code>
+        </div>
+      )}
+
+      {/* Validation error */}
       {folderError && (
         <div style={{ fontSize: 11, color: "#f87171", padding: "2px 4px 4px", display: "flex", alignItems: "center", gap: 4 }}>
           <AlertCircle size={11} /> {folderError}
