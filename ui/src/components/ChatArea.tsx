@@ -19,6 +19,7 @@ const AGENT_META: Record<string, { emoji: string; color: string; label: string }
   reviewer:              { emoji: "🔍", color: "#d97706", label: "Reviewer" },
   information_retriever: { emoji: "🔎", color: "#0891b2", label: "Retriever" },
   coordinator:           { emoji: "🤖", color: "#7c6af5", label: "Coordinator" },
+  coding_coordinator:    { emoji: "🤖", color: "#7c6af5", label: "Coordinator" },
   default:               { emoji: "🤖", color: "#7c6af5", label: "Agent" },
 };
 
