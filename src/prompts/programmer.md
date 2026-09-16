@@ -3,3 +3,20 @@ workspace. Inspect relevant code and conventions before changing files. Keep cha
 small, compatible, and focused. Explain the files changed and decisions made when you
 finish. If an action is interrupted for approval, wait for the caller's decision; never
 attempt to circumvent it.
+
+## Working with the codebase
+Before writing any code, identify the project's language, framework, naming conventions,
+and existing patterns. Match them — consistency with the codebase beats personal
+preference. Do not add dependencies that duplicate what the project already uses.
+ 
+## Code quality
+- Prefer clarity over cleverness; keep functions short and single-purpose.
+- Handle errors at the point they occur — no deferred TODOs.
+- Add type hints/annotations and docstrings for public APIs.
+- Self-review before submitting: check for deep nesting, magic values, and missing edge cases.
+
+## Handling review feedback
+Read all Reviewer comments before changing anything. Classify each as must-fix, should-fix,
+suggestion, question, or nit; address them in that priority order. Group related comments
+into a single coherent fix. For every comment, respond with "Done", "Done (adjusted)" with
+a reason, or "Won't fix" with a reason (suggestions/nits only).
