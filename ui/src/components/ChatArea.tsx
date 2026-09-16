@@ -3,10 +3,14 @@ import type { StreamEvent } from "../hooks/useRunStream";
 import type { Message } from "./MessageBubble";
 import { MessageBubble } from "./MessageBubble";
 
-interface Props {
-  task: string | null;
-  sourceFolder: string | null;
+export interface ChatTurn {
+  task: string;
   events: StreamEvent[];
+}
+
+interface Props {
+  sourceFolder: string | null;
+  turns: ChatTurn[];
 }
 
 const AGENT_META: Record<string, { emoji: string; color: string; label: string }> = {
@@ -18,24 +22,23 @@ const AGENT_META: Record<string, { emoji: string; color: string; label: string }
   default:               { emoji: "🤖", color: "#7c6af5", label: "Agent" },
 };
 
-function eventsToMessages(
-  task: string | null,
+function turnToMessages(
+  turnIndex: number,
+  task: string,
   folder: string | null,
   events: StreamEvent[]
 ): Message[] {
   const msgs: Message[] = [];
   let idCounter = 0;
 
-  if (task) {
-    msgs.push({
-      id: `task-${idCounter++}`,
-      kind: "user",
-      sender: "You",
-      avatarEmoji: "👤",
-      avatarColor: "var(--accent)",
-      text: folder ? `${task}\n\n📁 ${folder}` : task,
-    });
-  }
+  msgs.push({
+    id: `t${turnIndex}-task-${idCounter++}`,
+    kind: "user",
+    sender: "You",
+    avatarEmoji: "👤",
+    avatarColor: "var(--accent)",
+    text: turnIndex === 0 && folder ? `${task}\n\n📁 ${folder}` : task,
+  });
 
   let pendingAgentText = "";
   let pendingAgent = "coordinator";
@@ -44,7 +47,7 @@ function eventsToMessages(
     if (!pendingAgentText.trim()) return;
     const meta = AGENT_META[pendingAgent] ?? AGENT_META.default;
     msgs.push({
-      id: `agent-${idCounter++}`,
+      id: `t${turnIndex}-agent-${idCounter++}`,
       kind: "agent",
       sender: meta.label,
       avatarEmoji: meta.emoji,
@@ -66,7 +69,7 @@ function eventsToMessages(
       if (s === "running") {
         const meta = AGENT_META.coordinator;
         msgs.push({
-          id: `status-${idCounter++}`,
+          id: `t${turnIndex}-status-${idCounter++}`,
           kind: "muted",
           sender: meta.label,
           avatarEmoji: meta.emoji,
@@ -80,15 +83,17 @@ function eventsToMessages(
   return msgs;
 }
 
-export function ChatArea({ task, sourceFolder, events }: Props) {
+export function ChatArea({ sourceFolder, turns }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
-  const messages = eventsToMessages(task, sourceFolder, events);
+  const messages = turns.flatMap((turn, i) =>
+    turnToMessages(i, turn.task, sourceFolder, turn.events)
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
-  if (!task && events.length === 0) {
+  if (turns.length === 0) {
     return (
       <div className="chat-area">
         <div className="chat-empty">

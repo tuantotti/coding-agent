@@ -1,20 +1,25 @@
 import { Settings, Upload, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApprovalCard } from "./components/ApprovalCard";
-import { ChatArea } from "./components/ChatArea";
+import { ChatArea, type ChatTurn } from "./components/ChatArea";
 import { EmptyState } from "./components/EmptyState";
 import { InputCard } from "./components/InputCard";
 import { RunStatusBadge } from "./components/RunStatusBadge";
 import { Sidebar, type RunSummary } from "./components/Sidebar";
-import { useRunStream } from "./hooks/useRunStream";
+import { useRunStream, type StreamEvent } from "./hooks/useRunStream";
 import { api } from "./services/api";
 import type { ResumeRunRequest } from "./services/api";
 
-interface RunRecord {
+interface TurnRecord {
   run_id: string;
   task: string;
-  sourceFolder: string;
   startedAt: Date;
+}
+
+interface ConversationRecord {
+  id: string;
+  sourceFolder: string;
+  turns: TurnRecord[];
 }
 
 function relativeTime(d: Date): string {
@@ -24,15 +29,31 @@ function relativeTime(d: Date): string {
   return `${Math.floor(s / 3600)}h ago`;
 }
 
+function normalizeFolder(f: string): string {
+  return f.trim().replace(/\/+$/, "");
+}
+
 export function App() {
-  const [runs, setRuns] = useState<RunRecord[]>([]);
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationRecord[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [eventsCache, setEventsCache] = useState<Record<string, StreamEvent[]>>({});
   const [apiError, setApiError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [prefill, setPrefill] = useState("");
 
-  const activeRun = runs.find((r) => r.run_id === activeRunId) ?? null;
-  const stream = useRunStream(activeRunId);
+  const activeConversation = conversations.find((c) => c.id === activeConversationId) ?? null;
+  const latestTurn = activeConversation
+    ? activeConversation.turns[activeConversation.turns.length - 1]
+    : null;
+  const liveRunId = latestTurn?.run_id ?? null;
+  const stream = useRunStream(liveRunId);
+
+  // Cache each run's events as they stream in, so switching away and back
+  // (or appending a new turn) doesn't lose earlier turns' transcripts.
+  useEffect(() => {
+    if (!liveRunId) return;
+    setEventsCache((prev) => ({ ...prev, [liveRunId]: stream.events }));
+  }, [liveRunId, stream.events]);
 
   const isRunning =
     submitting ||
@@ -45,9 +66,21 @@ export function App() {
     setApiError(null);
     try {
       const run = await api.startRun({ task, source_folder: sourceFolder });
-      const record: RunRecord = { run_id: run.run_id, task, sourceFolder, startedAt: new Date() };
-      setRuns((prev) => [record, ...prev]);
-      setActiveRunId(run.run_id);
+      const turn: TurnRecord = { run_id: run.run_id, task, startedAt: new Date() };
+      const normalized = normalizeFolder(sourceFolder);
+      const existing = conversations.find((c) => normalizeFolder(c.sourceFolder) === normalized);
+
+      if (existing) {
+        setConversations((prev) => [
+          { ...existing, turns: [...existing.turns, turn] },
+          ...prev.filter((c) => c.id !== existing.id),
+        ]);
+        setActiveConversationId(existing.id);
+      } else {
+        const conv: ConversationRecord = { id: run.run_id, sourceFolder, turns: [turn] };
+        setConversations((prev) => [conv, ...prev]);
+        setActiveConversationId(conv.id);
+      }
       setPrefill("");
     } catch (e) {
       setApiError(e instanceof Error ? e.message : "Failed to start run");
@@ -57,14 +90,14 @@ export function App() {
   };
 
   const handleResume = async (req: ResumeRunRequest) => {
-    if (!activeRunId) return;
+    if (!liveRunId) return;
     setApiError(null);
-    try { await api.resumeRun(activeRunId, req); }
+    try { await api.resumeRun(liveRunId, req); }
     catch (e) { setApiError(e instanceof Error ? e.message : "Failed to submit"); }
   };
 
   const handleNewRun = () => {
-    setActiveRunId(null);
+    setActiveConversationId(null);
     setApiError(null);
     setPrefill("");
     stream.close();
@@ -74,21 +107,30 @@ export function App() {
     setPrefill(text);
   };
 
-  const sidebarRuns: RunSummary[] = runs.map((r) => ({
-    run_id: r.run_id,
-    label: r.task.length > 34 ? r.task.slice(0, 34) + "…" : r.task,
-    status: r.run_id === activeRunId ? stream.status : "idle",
-    time: relativeTime(r.startedAt),
-  }));
+  const sidebarRuns: RunSummary[] = conversations.map((c) => {
+    const last = c.turns[c.turns.length - 1];
+    return {
+      run_id: c.id,
+      label: last.task.length > 34 ? last.task.slice(0, 34) + "…" : last.task,
+      status: c.id === activeConversationId ? stream.status : "idle",
+      time: relativeTime(last.startedAt),
+    };
+  });
 
-  const hasActiveRun = !!activeRun;
+  const hasActiveRun = !!activeConversation;
+  const chatTurns: ChatTurn[] = activeConversation
+    ? activeConversation.turns.map((t) => ({
+        task: t.task,
+        events: t.run_id === liveRunId ? stream.events : (eventsCache[t.run_id] ?? []),
+      }))
+    : [];
 
   return (
     <div className="app-shell">
       <Sidebar
         runs={sidebarRuns}
-        activeRunId={activeRunId}
-        onSelect={setActiveRunId}
+        activeRunId={activeConversationId}
+        onSelect={setActiveConversationId}
         onNewRun={handleNewRun}
       />
 
@@ -140,9 +182,8 @@ export function App() {
           /* ── Active run: chat + approval + input bar ── */
           <>
             <ChatArea
-              task={activeRun.task}
-              sourceFolder={activeRun.sourceFolder}
-              events={stream.events}
+              sourceFolder={activeConversation.sourceFolder}
+              turns={chatTurns}
             />
 
             {stream.approvals.length > 0 && (
@@ -155,17 +196,10 @@ export function App() {
               </div>
             )}
 
-            {stream.output && (
-              <div className="output-card">
-                <div className="output-card-title">✅ Final output</div>
-                <pre>{stream.output}</pre>
-              </div>
-            )}
-
             <InputCard
               onSubmit={handleStart}
               disabled={isRunning}
-              defaultFolder={activeRun.sourceFolder}
+              defaultFolder={activeConversation.sourceFolder}
               variant="bottom"
             />
           </>
