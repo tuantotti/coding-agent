@@ -14,7 +14,7 @@ export function InputCard({
   onSubmit,
   disabled,
   initialTask = "",
-  defaultFolder = ".",
+  defaultFolder = "",
   variant = "center",
 }: Props) {
   const [task, setTask] = useState(initialTask);
