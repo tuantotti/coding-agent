@@ -21,9 +21,7 @@ export function InputCard({
   const [folder, setFolder] = useState(defaultFolder);
   const [folderError, setFolderError] = useState("");
   const [searching, setSearching] = useState(false);
-  const [pathChoices, setPathChoices] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const autoResize = () => {
     const el = textareaRef.current;
@@ -40,7 +38,6 @@ export function InputCard({
       return;
     }
     setFolderError("");
-    setPathChoices([]);
     onSubmit(task.trim(), f);
     setTask("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -51,44 +48,16 @@ export function InputCard({
   };
 
   const handleBrowse = async () => {
-    if ("showDirectoryPicker" in window) {
-      try {
-        const handle = await (
-          window as unknown as { showDirectoryPicker: () => Promise<{ name: string }> }
-        ).showDirectoryPicker();
-        const name = handle.name;
-
-        // Ask backend to resolve the full path
-        setSearching(true);
-        setFolderError("");
-        setPathChoices([]);
-        try {
-          const { paths } = await api.findDir(name);
-          if (paths.length === 1) {
-            setFolder(paths[0]);
-          } else if (paths.length > 1) {
-            setFolder(paths[0]);
-            setPathChoices(paths);
-          } else {
-            // Not found — fill name as hint, ask user to type prefix
-            setFolder(name);
-            setFolderError(`Không tìm thấy "${name}" trong home directory. Nhập đường dẫn đầy đủ.`);
-          }
-        } finally {
-          setSearching(false);
-        }
-      } catch { /* cancelled */ }
-    } else {
-      fileInputRef.current?.click();
+    setSearching(true);
+    setFolderError("");
+    try {
+      const { path } = await api.pickDir();
+      if (path) setFolder(path);
+    } catch {
+      setFolderError("Không thể mở hộp thoại chọn thư mục.");
+    } finally {
+      setSearching(false);
     }
-  };
-
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const parts = (file as File & { webkitRelativePath?: string }).webkitRelativePath?.split("/");
-    if (parts?.[0]) setFolder(parts[0]);
-    e.target.value = "";
   };
 
   const card = (
@@ -102,7 +71,7 @@ export function InputCard({
           className="input-card-folder-path"
           type="text"
           value={folder}
-          onChange={(e) => { setFolder(e.target.value); setFolderError(""); setPathChoices([]); }}
+          onChange={(e) => { setFolder(e.target.value); setFolderError(""); }}
           placeholder="/absolute/path/to/your/project"
           disabled={disabled || searching}
           style={folderError ? { color: "#f87171" } : {}}
@@ -110,41 +79,7 @@ export function InputCard({
         <button className="input-card-browse" onClick={handleBrowse} disabled={disabled || searching} type="button">
           Browse…
         </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          style={{ display: "none" }}
-          // @ts-expect-error non-standard attr
-          webkitdirectory=""
-          onChange={handleFileInput}
-        />
       </div>
-
-      {/* Multiple matches — let user pick */}
-      {pathChoices.length > 1 && (
-        <div style={{ fontSize: 11, padding: "4px 4px 2px" }}>
-          <span style={{ color: "var(--text-faint)", marginBottom: 4, display: "block" }}>
-            Tìm thấy {pathChoices.length} thư mục — chọn một:
-          </span>
-          {pathChoices.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => { setFolder(p); setPathChoices([]); }}
-              style={{
-                display: "block", width: "100%", textAlign: "left",
-                padding: "3px 8px", borderRadius: 5, border: "none",
-                background: folder === p ? "var(--accent-light)" : "transparent",
-                color: folder === p ? "var(--accent-text)" : "var(--text-muted)",
-                fontFamily: "monospace", fontSize: 11, cursor: "pointer",
-                marginBottom: 2,
-              }}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* Validation error */}
       {folderError && (
