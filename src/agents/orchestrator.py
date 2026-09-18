@@ -12,6 +12,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.config import READ_ONLY_PERMISSIONS, READ_TOOLS, filesystem_middleware
 from src.agents.information_retriever import create_information_retriever_subagent
+from src.agents.requirement import create_requirement_subagent
 from src.agents.programmer import create_programmer_subagent
 from src.agents.reviewer import create_reviewer_subagent
 from src.agents.tester import create_tester_subagent
@@ -80,6 +81,9 @@ def create_coding_agent(settings: AgentSettings | None = None) -> CompiledStateG
     workspace_root = agent_settings.resolved_workspace_root()
     backend = _create_backend(agent_settings, workspace_root)
     subagents = [
+        create_requirement_subagent(
+            create_azure_model(deployment=agent_settings.model), backend
+        ),
         create_programmer_subagent(
             create_azure_model(deployment=agent_settings.model), backend
         ),

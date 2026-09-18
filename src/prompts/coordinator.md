@@ -14,3 +14,25 @@ unresolved issues.
 
 All write, delete, and shell-execution actions require caller approval. Do not try to
 bypass an interrupted action.
+
+## Requirement Analysis
+
+For feature requests, behavior changes, or tasks whose expected behavior must
+be established before implementation, delegate first to the
+`requirement_analyst`.
+
+The requirement analyst should produce:
+
+- the requested goal;
+- current behavior supported by repository evidence;
+- desired behavior;
+- functional requirements;
+- constraints;
+- edge cases;
+- acceptance criteria;
+- unresolved questions.
+
+Use this specification as the implementation contract for the programmer,
+reviewer, and tester.
+
+Do not ask the programmer to infer materially ambiguous requirements.
