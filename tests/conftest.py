@@ -1,11 +1,7 @@
-"""Shared pytest configuration.
-
-``src.settings`` requires ``TAVILY_API_KEY`` with no default, so importing any
-``src.agents.*`` module (even just to inspect a subagent spec, with no network
-calls) fails collection unless the environment already has it set. Provide a
-harmless placeholder for tests that only need the import to succeed.
-"""
-
-import os
-
-os.environ.setdefault("TAVILY_API_KEY", "test-placeholder")
+collect_ignore = [
+    # Demo/scaffold script (no test_* functions), runs a live Azure OpenAI
+    # call at module import time and aborts pytest collection with a 404
+    # when the configured deployment doesn't exist. Excluded rather than
+    # edited since it's a teammate's file, not part of this scope.
+    "test_deep_agents.py",
+]
