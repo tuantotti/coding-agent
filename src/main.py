@@ -5,12 +5,14 @@ from dataclasses import replace
 
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
 
 from src.agents import AgentSettings, create_coding_agent
 from src.logger import configure_logging
 from src.routes.runs import router
+from src.routes.system import system_router
 from src.services.coding_agent import (
     CodingAgentService,
     InvalidApproval,
@@ -67,8 +69,15 @@ def create_app(
                 logger.info("Coding agent application shutdown completed")
 
     app = FastAPI(title="Coding Agent API", lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.state.ready = False
     app.include_router(router)
+    app.include_router(system_router)
 
     @app.get("/health")
     async def health() -> JSONResponse:

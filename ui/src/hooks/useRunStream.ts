@@ -71,7 +71,7 @@ export function useRunStream(runId: string | null) {
       setState((prev) => {
         const next: RunStreamState = { ...prev, events: [...prev.events, ev] };
 
-        if (eventName === "status" || TERMINAL.has(eventName)) {
+        if (eventName === "status" || eventName === "approval_required" || TERMINAL.has(eventName)) {
           next.status = (data.status as RunStatus | undefined) ?? (eventName as RunStatus);
         }
         if (eventName === "approval_required") {

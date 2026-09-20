@@ -68,4 +68,10 @@ export const api = {
 
   resumeRun: (runId: string, body: ResumeRunRequest): Promise<Run> =>
     request(`/v1/runs/${runId}/resume`, { method: "POST", body: JSON.stringify(body) }),
+
+  pickDir: (): Promise<{ path: string | null }> =>
+    request("/v1/system/pick-dir"),
+
+  getConfig: (): Promise<{ model: string }> =>
+    request("/v1/system/config"),
 };
