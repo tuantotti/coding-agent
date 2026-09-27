@@ -1,5 +1,7 @@
 """Programmer subagent specification."""
 
+from pathlib import Path
+
 from deepagents import SubAgent
 from deepagents.backends.protocol import BackendProtocol
 from langchain_core.language_models import BaseChatModel
@@ -9,14 +11,17 @@ from src.prompts import load_prompt
 
 
 def create_programmer_subagent(
-    model: str | BaseChatModel, backend: BackendProtocol
+    model: str | BaseChatModel,
+    backend: BackendProtocol,
+    *,
+    workspace_root: str | Path = ".",
 ) -> SubAgent:
     """Return the isolated specialist that is allowed to change code."""
     return {
         "name": "programmer",
         "description": "Implements approved code changes and reports changed files.",
         "model": model,
-        "system_prompt": load_prompt("programmer"),
+        "system_prompt": load_prompt("programmer", workspace_root=workspace_root),
         "middleware": [
             filesystem_middleware(
                 backend,

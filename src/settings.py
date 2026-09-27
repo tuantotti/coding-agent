@@ -47,6 +47,7 @@ class Settings(BaseSettings):
         default=120,
         gt=0,
     )
+    coding_web_search_enabled: bool = True
 
     # ------------------------------------------------------------------
     # LangSmith
@@ -70,7 +71,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Tavily
     # ------------------------------------------------------------------
-    tavily_api_key: SecretStr = Field(min_length=1)
+    tavily_api_key: SecretStr | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

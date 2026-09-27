@@ -1,82 +1,248 @@
-# Coding Agent API
+# Coding Agent
 
-A local FastAPI service coordinating Deep Agents programmer, reviewer, tester,
-and information-retrieval specialists. Submit a local source folder with each
-task, stream progress and assistant text, and explicitly approve proposed writes,
-deletes, and shell commands. Polling remains available.
+A local, human-in-the-loop coding system built with FastAPI, LangGraph, Deep
+Agents, and Azure OpenAI. Give it a task and an absolute source-directory path;
+the coordinator delegates work to specialized agents, streams progress to a web
+or terminal client, and pauses before any file mutation or shell command.
 
-## Setup
+## Overview
 
-Requires Python 3.12+ and uv.
+The application has three ways to interact with the same agent runtime:
+
+- A React web UI for starting tasks, following agent activity, and reviewing
+  approval requests.
+- A Rich terminal client with live output and interactive approvals.
+- A REST and Server-Sent Events (SSE) API for custom integrations.
+
+Each run receives its own LangGraph graph and in-memory checkpoint. The API
+serializes work so only one unfinished run can exist at a time, including while
+a run is waiting for approval. The selected `source_folder` becomes the root for
+project file tools and the working directory for approved commands, alongside a
+protected, read-only skills mount.
+
+## Features
+
+- Coordinator-led multi-agent workflow with four specialists:
+  - **Programmer** — implements approved file changes.
+  - **Reviewer** — performs independent, read-only code review.
+  - **Tester** — runs checks through approval-gated shell access.
+  - **Information retriever** — inspects the workspace and searches the web
+    through Tavily.
+- Human approval for file writes, edits, deletions, and shell commands.
+- Live SSE events for status, assistant text, agent activity, approval requests,
+  completion, and failure.
+- Replayable event history with reconnect support.
+- Web, terminal, polling, and streaming interfaces over one backend.
+- Per-run workspace selection with absolute-path validation and symlink
+  resolution.
+- Optional LangSmith and Langfuse observability.
+- Dependency injection and deterministic test doubles for offline tests.
+
+## Agent Architecture
+
+```mermaid
+flowchart LR
+
+
+    subgraph Runtime[LangGraph runtime]
+        Coordinator[Coding coordinator]
+        Programmer[Programmer]
+        Reviewer[Reviewer]
+        Tester[Tester]
+        Retriever[Information retriever]
+        Checkpoint[In-memory checkpoint]
+    end
+
+    Coordinator --> Programmer
+    Coordinator --> Reviewer
+    Coordinator --> Tester
+    Coordinator --> Retriever
+    Coordinator <--> Checkpoint
+```
+
+## Quick start
+
+### Prerequisites
+
+- Python 3.12 or newer
+- [uv](https://docs.astral.sh/uv/)
+- An Azure OpenAI deployment
+- A Tavily API key
+- Node.js 18 or newer for the web UI
+
+#### Backend setup
 
 ```bash
 uv sync --all-groups
 cp .env.example .env
-# Configure your model provider and TAVILY_API_KEY in .env.
-uv run uvicorn src.main:app --host 127.0.0.1 --port 8000 --workers 1
-# Or, after activating the virtual environment:
-python -m src.main
 ```
 
-Interactive API documentation: http://127.0.0.1:8000/docs.
-Startup validates configuration. Each submitted run gets its own graph and
-checkpointer, retained across approval pauses. Importing
-`main` does not require credentials or create external clients.
+Add your Azure OpenAI and Tavily credentials to `.env`, then start the API:
 
-| Setting                                                         | Default                                                    |
-| --------------------------------------------------------------- | ---------------------------------------------------------- |
-| OPENAI_API_KEY                                                  | Required when using OpenAI                                 |
-| AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, OPENAI_API_VERSION | Used for Azure OpenAI                                      |
-| TAVILY_API_KEY                                                  | Required                                                   |
-| CODING_MODEL                                                    | openai:gpt-5.4                                             |
-| CODING_WORKSPACE_ROOT                                           | Default for direct Python usage only                       |
-| CODING_MAX_REMEDIATION_CYCLES                                   | 2                                                          |
-| CODING_SHELL_TIMEOUT_SECONDS                                    | 120                                                        |
-| CODING_AGENT_API_URL                                            | http://127.0.0.1:8000 (exported terminal environment only) |
+```bash
+uv run uvicorn src.main:app --host 127.0.0.1 --port 8000 --workers 1
+```
 
-Server environment variables override `.env`; the terminal-specific
-`CODING_AGENT_API_URL` exception is described below. Model deployment
-availability depends on your provider account. API clients select their source
-folder but cannot override model credentials.
+You can also run `uv run python -m src.main`. Check readiness at
+[http://127.0.0.1:8000/health](http://127.0.0.1:8000/health) and browse the generated API documentation at
+[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
-## Interactive terminal client
+#### UI Setup
 
-Start the API separately, then connect the Rich terminal client from another
-shell. The client never starts or stops the server:
+The React interface provides a task composer, source-folder picker, streamed
+agent activity, conversation history for the current browser session, run-status
+indicators, and an approval panel for proposed tool actions.
+
+![Coding Agent web interface](ui/screenshot.png)
+
+With the backend running, start the UI in a second terminal:
+
+```bash
+cd ui
+npm install
+cp .env.example .env
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173). In development, an empty `VITE_API_URL` uses the
+Vite proxy; set it to `http://127.0.0.1:8000` to call the backend directly.
+Production assets are created with `npm run build` in `ui/dist/`.
+
+See the [UI guide](ui/README.md) for its configuration, shortcuts, components,
+and backend endpoints.
+
+### Backend Usage
+
+#### Terminal client
+
+Start the backend separately, then connect from another shell:
 
 ```bash
 uv run python -m src.terminal \
   --task "Review this project for bugs" \
-  --source-folder /absolute/path/on/api/server
+  --source-folder /absolute/path/to/project
 ```
 
-Both `--task` and `--source-folder` are optional; missing values are prompted
-for interactively. Select the API with `--api-url`, then
-`CODING_AGENT_API_URL`, or the default `http://127.0.0.1:8000`, in that order.
-The terminal reads `CODING_AGENT_API_URL` from its process environment; it does
-not load `.env`. Export the value in the shell or supply `--api-url` directly.
-The `.env.example` entry is a shell-configuration example for this option.
-The source folder is interpreted and validated by the API server. The terminal
-does not check it locally or upload files, so remote projects must already be
-available to the server at the path supplied.
+Both arguments are optional and are prompted for when omitted. The API URL is
+selected in this order:
 
-Queued and running states, agent activity, and incremental assistant text are
-shown while the run proceeds. Approval pauses display every proposed action,
-its description, and formatted JSON arguments in server order. Each action
-must be explicitly approved, edited, or rejected; edits keep the action name
-and require a JSON object, while rejection feedback is optional. The client
-never auto-approves.
+1. `--api-url`
+2. `CODING_AGENT_API_URL` from the terminal process environment
+3. `http://127.0.0.1:8000`
 
-If the event connection drops, the terminal makes at most three reconnects
-after 0.5, 1, and 2 seconds and resumes with the last event ID without
-redisplaying events. If replay history has expired, it polls the run once to
-recover an already completed or failed result; otherwise it reports that
-history was lost and exits unsuccessfully. Sessions are not persisted.
+The terminal does not load `CODING_AGENT_API_URL` from `.env`; export it in the
+shell or pass `--api-url`. It also does not upload local files. The source path
+must already be accessible on the API server.
 
-## Optional Langfuse tracing
+#### API usage
 
-After installing dependencies, configure these server environment variables
-(or put them in `.env`) and restart:
+Submit a run:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/runs \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "task": "Review this project for bugs.",
+    "source_folder": "/absolute/path/to/project"
+  }'
+```
+
+The API returns HTTP 202 with a generated `run_id`. Use it to poll the run or
+stream events:
+
+```bash
+curl http://127.0.0.1:8000/v1/runs/RUN_ID
+curl -N http://127.0.0.1:8000/v1/runs/RUN_ID/events
+```
+
+Run states are `queued`, `running`, `awaiting_approval`, `completed`, and
+`failed`. SSE event types are:
+
+| Event                 | Purpose                                                |
+| --------------------- | ------------------------------------------------------ |
+| `status`            | Reports queued and running transitions.                |
+| `text_delta`        | Streams visible text with agent and subgraph metadata. |
+| `agent_activity`    | Reports graph-node activity.                           |
+| `approval_required` | Supplies ordered actions awaiting decisions.           |
+| `completed`         | Returns the coordinator's final output.                |
+| `failed`            | Returns a sanitized error.                             |
+
+Reconnect with the last received event ID:
+
+```bash
+curl -N -H 'Last-Event-ID: 12' \
+  http://127.0.0.1:8000/v1/runs/RUN_ID/events
+```
+
+The latest 1,000 events per run are retained in memory. The server sends a
+heartbeat every 15 seconds while idle. If replay history has expired, poll the
+run endpoint until it reaches a terminal state.
+
+#### Approvals
+
+When a run reaches `awaiting_approval`, inspect every item in `approvals` and
+send exactly one decision for each ordered action:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/runs/RUN_ID/resume \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "decisions": {
+      "INTERRUPT_ID": [
+        {"type": "approve"}
+      ]
+    }
+  }'
+```
+
+Supported decision shapes are:
+
+```json
+{"type":"approve"}
+{"type":"reject","message":"Do not run this command."}
+{"type":"edit","edited_action":{"name":"execute","args":{"command":"pytest -q"}}}
+```
+
+Edits must keep the original tool name and satisfy its argument schema. A
+rejection gives feedback to the agent but does not cancel the run. Decision
+order must match the returned action order; invalid, missing, or stale decisions
+are rejected without consuming the pending approval.
+
+### Configuration
+
+Server environment variables override values in `.env`.
+
+| Variable                          | Default / requirement                                                        |
+| --------------------------------- | ---------------------------------------------------------------------------- |
+| `AZURE_OPENAI_API_KEY`          | Required Azure OpenAI credential.                                            |
+| `AZURE_OPENAI_ENDPOINT`         | Required Azure OpenAI endpoint.                                              |
+| `OPENAI_API_VERSION`            | `2025-04-01-preview` in `.env.example`.                                  |
+| `TAVILY_API_KEY`                | Required for the information-retrieval agent.                                |
+| `CODING_MODEL`                  | `azure_openai:gpt-5.4-nano` in `.env.example`.                           |
+| `CODING_WORKSPACE_ROOT`         | `.`; default for direct Python usage. API runs use their submitted folder. |
+| `CODING_MAX_REMEDIATION_CYCLES` | `2`.                                                                       |
+| `CODING_SHELL_TIMEOUT_SECONDS`  | `120`.                                                                     |
+| `CODING_AGENT_API_URL`          | Terminal-only API selection; defaults to`http://127.0.0.1:8000`.           |
+| `LOG_LEVEL`                     | `debug`.                                                                   |
+| `LOG_JSON`                      | `false`.                                                                   |
+| `LOG_DIR`                       | `logs`.                                                                    |
+
+Deployment availability depends on the configured Azure OpenAI account. API
+clients can choose a source folder but cannot override model credentials.
+
+#### Observability
+
+LangSmith tracing is configured with the standard environment variables in
+`.env.example`:
+
+```dotenv
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=
+LANGSMITH_API_KEY=
+LANGSMITH_PROJECT=
+```
+
+Langfuse is optional and independent of LangSmith:
 
 ```dotenv
 LANGFUSE_TRACING_ENABLED=true
@@ -85,168 +251,71 @@ LANGFUSE_SECRET_KEY=sk-lf-your-secret-key
 LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ```
 
-Tracing defaults to disabled. Both keys are required when enabled. Set the base
-URL to your Langfuse region or self-hosted instance. LangSmith remains independent
-and can be enabled alongside Langfuse.
+Restart the backend after changing tracing settings. Every initial execution and
+approval resume receives a fresh callback, while all traces for a run share its
+`run_id` as the Langfuse session ID.
 
-Each initial graph execution and approval resume gets a fresh callback and trace;
-all traces for a run share its `run_id` as the Langfuse session ID. Callbacks
-propagate to delegated agents and tools without changing SSE or approvals.
-Shutdown stops agent jobs before flushing queued traces off the event loop.
+Tracing can capture prompts, source code, tool input, command output, and model
+responses. Enable it only when sending workspace data to the configured service
+is acceptable; the application applies no custom redaction.
 
-The [standard Langfuse callback](https://langfuse.com/integrations/frameworks/langchain)
-captures available model/tool inputs and outputs, which may include source code,
-prompts, command output, and sensitive data. Enable it only when exporting this
-workspace data to your configured Langfuse instance is acceptable. No custom
-redaction is applied.
+## Project structure
 
-## Submit and poll
-
-```bash
-curl http://127.0.0.1:8000/health
-curl -X POST http://127.0.0.1:8000/v1/runs \
-  -H 'Content-Type: application/json' \
-  -d '{"task":"Review this project for bugs.","source_folder":"/absolute/path/to/project"}'
-curl http://127.0.0.1:8000/v1/runs/RUN_ID
+```text
+.
+├── src/
+│   ├── agents/       # Coordinator and specialist factories
+│   ├── models/       # LLM setup and API data contracts
+│   ├── prompts/      # Coordinator and specialist instructions
+│   ├── routes/       # Run, streaming, health, and UI-helper endpoints
+│   ├── services/     # Run lifecycle, event streaming, and tracing
+│   ├── skills/       # Skills mounted read-only into agent workspaces
+│   ├── terminal/     # Rich terminal client
+│   ├── tools/        # Approval metadata and Tavily search
+│   ├── main.py       # FastAPI application factory and entry point
+│   └── settings.py   # Environment-backed configuration
+├── tests/            # Backend unit and integration tests
+├── ui/               # React, TypeScript, and Vite web client
+├── .env.example      # Backend configuration template
+└── pyproject.toml    # Python dependencies and tool configuration
 ```
 
-Submission returns HTTP 202 with a generated `run_id`. Poll that ID for
-`queued`, `running`, `awaiting_approval`, `completed`, or `failed`.
-Responses include the resolved `source_folder`, timestamps, final assistant
-`output`, pending `approvals`,
-and a sanitized `error`. Internal graph state is not returned.
+## Benchmark
 
-The source folder is required and must be an absolute path to an existing,
-readable directory on the API server. Symlinks are resolved before execution.
-The selected directory becomes the file-tool root and shell working directory.
-Missing, relative, nonexistent, or inaccessible paths return HTTP 422. Old
-task-only submissions must add this field; no default is silently substituted.
-This is not a file-upload API: a remote client's files must first be mounted or
-copied to the server.
+Evaluate the coding agent locally against SWE-bench Verified`benchmarks/swebench`. The workflow generates official-format
+predictions and grades them with the SWE-bench Docker harness.
 
-Only one unfinished run is permitted across this server, including while
-awaiting approval, even when requests select different folders. A conflicting
-submission returns HTTP 409. Review-only prompts return inspection findings;
-they no longer automatically trigger implementation and testing.
+Benchmark mode automatically approves agent writes and shell commands, so it
+must run inside a disposable container or virtual machine. See the
+[benchmark guide](benchmarks/README.md) for setup, safety requirements, example
+commands, generated artifacts, and grading instructions.
 
-## Stream results
+## Limitations and future work
 
-After submission, connect to the run's Server-Sent Events endpoint:
+### Current limitations
 
-```bash
-curl -N http://127.0.0.1:8000/v1/runs/RUN_ID/events
-```
+- The server has no authentication and must not be exposed as a shared public
+  service.
+- Only one unfinished run is allowed across the process.
+- Runs, graph checkpoints, event history, and UI conversation history are kept
+  in memory and disappear after a restart or browser refresh.
+- Source folders must already exist on the API host; there is no upload or
+  remote-repository checkout workflow.
+- File tools are rooted to the selected workspace, but approved shell commands
+  execute on the host and are not sandboxed.
+- The remediation-cycle limit is prompt-directed rather than a strict execution
+  counter. A graph recursion limit provides a final runaway safeguard.
+- Failures do not roll back file changes or commands that were already approved
+  and executed.
+- Event replay is limited to the latest 1,000 events for each run.
 
-Events have a monotonically increasing per-run `id`, an `event` type, and JSON
-`data` containing `run_id`, `timestamp`, and event-specific fields:
+### Possible future work
 
-| Event | Data |
-| --- | --- |
-| status | queued or running status |
-| text_delta | visible assistant text, message_id, agent, agent_path |
-| agent_activity | graph node and subgraph path reporting progress |
-| approval_required | awaiting_approval status and ordered approvals |
-| completed | completed status and final root assistant output |
-| failed | failed status and sanitized error |
-
-Specialist text is identified separately from the coordinator's final output.
-Models without token streaming may emit complete text chunks. Reasoning blocks,
-raw graph state, and provider exception details are excluded.
-
-The connection remains open while awaiting approval and sends a heartbeat
-comment every 15 seconds when idle. Submit decisions through the resume endpoint;
-events continue on the same connection. Completion or failure closes the stream.
-Disconnecting a stream does not cancel the agent, and multiple subscribers are
-supported. Browser clients should close their EventSource on terminal events.
-
-Reconnect after the last event you received:
-
-```bash
-curl -N -H 'Last-Event-ID: 12' http://127.0.0.1:8000/v1/runs/RUN_ID/events
-```
-
-The latest 1,000 events per run are retained in memory. Without a cursor, replay
-starts at event 1. An expired cursor (including a late initial connection after
-event 1 has been evicted) returns HTTP 409; malformed or future cursors return
-422, and unknown runs return 404. A connected subscriber that falls behind
-receives `replay_expired` and is disconnected. Poll the run for its complete
-final result if replay history is no longer available.
-
-## Approve and resume
-
-When a run pauses, inspect every entry in `approvals`. Each contains an
-`interrupt_id`, ordered `action_requests` (tool name, arguments, description),
-and `review_configs` describing allowed decisions.
-
-```bash
-curl -X POST http://127.0.0.1:8000/v1/runs/RUN_ID/resume \
-  -H 'Content-Type: application/json' \
-  -d '{"decisions":{"INTERRUPT_ID":[{"type":"approve"}]}}'
-```
-
-Supply exactly the pending interrupt IDs and one decision per action, preserving
-the order returned by the API. Available decision shapes are:
-
-```json
-{"type":"approve"}
-{"type":"reject","message":"Do not run this command."}
-{"type":"edit","edited_action":{"name":"execute","args":{"command":"pytest -q"}}}
-```
-
-Edits must preserve the tool name and match the supplied argument schema;
-invalid edits return 422 without consuming pending approvals.
-Resumption returns HTTP 202 and continues the
-same checkpoint; poll again because the agent may request further approvals.
-Never automatically approve every request. Rejection gives feedback to the agent;
-it does not cancel the whole run.
-
-Errors: HTTP 404 for an unknown run; 409 for occupied workspace, duplicate
-resume, or a run not awaiting approval; 422 for malformed input, stale/missing
-interrupt IDs, mismatched decision counts, or disallowed decisions.
-
-## Design and operational limits
-
-- `src/agents`: typed graph and specialist factories.
-- `src/services`: injected graph, run storage, background task lifecycle,
-  workspace serialization, and approval handling independent of HTTP.
-- `src/routes` and `src/models`: thin HTTP handlers and Pydantic contracts.
-- `src/main.py`: application factory, dependency lifetime, and error mapping.
-- `src/prompts`, `src/skills`, and `src/tools`: role instructions, reusable
-  workflows, and Tavily integration.
-
-This is an unauthenticated localhost API for one trusted user, one process, and
-one active run at a time. Do not expose it as a shared remote service.
-Run summaries and event history live in memory and disappear on restart.
-Graphs and checkpoints are released after terminal outcomes. Avoid auto-reload
-during active runs.
-Shutdown cancels and awaits tracked Python jobs; an already approved host command
-may continue until it exits or reaches its timeout.
-
-Commands run through LocalShellBackend on the host with the server's environment
-and permissions. File tools use workspace-rooted virtual paths and a protected
-skills mount; these restrictions do not sandbox shell commands. Review every
-command and proposed change before approving. The tester lacks file-edit tools,
-but an approved command can still modify files.
-
-The two-remediation-cycle limit is prompt-directed, not a guaranteed execution
-counter. The service also sets a graph recursion limit to terminate runaway runs.
-Failures do not roll back changes already approved and executed.
-
-## Python usage and testing
-
-Run Python from the project root and import
-`AgentSettings` and `create_coding_agent` from `src.agents`. The factory returns
-a compiled graph; supply a stable
-`configurable.thread_id` for invocation and LangGraph `Command(resume=...)`
-for direct approval handling. The service uses each run ID as its thread ID.
-Its Python interface now takes a graph factory accepting a resolved `Path`,
-and `await service.start(task, source_folder)` requires an explicit folder.
-
-```bash
-uv run ruff check .
-uv run ruff format --check .
-uv run pytest -q
-```
-
-Tests inject fake graphs and a deterministic chat model; no provider credentials
-or live model/search requests are required.
+- Add authentication, authorization, and per-user workspace isolation.
+- Persist runs, checkpoints, approvals, and event history in durable storage.
+- Support multiple concurrent runs with an explicit workspace-locking strategy.
+- Execute commands in containers or another hardened sandbox.
+- Add repository cloning or controlled workspace-upload workflows.
+- Persist UI conversations and add reliable run cancellation.
+- Add production deployment guidance, metrics, and retention controls for traces
+  and logs.

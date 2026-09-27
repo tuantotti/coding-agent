@@ -5,12 +5,14 @@ from dataclasses import replace
 
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
 
 from src.agents import AgentSettings, create_coding_agent
 from src.logger import configure_logging
 from src.routes.runs import router
+from src.routes.system import system_router
 from src.services.coding_agent import (
     CodingAgentService,
     InvalidApproval,
@@ -30,8 +32,16 @@ configure_logging(
 
 def create_app(
     service: CodingAgentService | None = None,
+    agent_settings: AgentSettings | None = None,
 ) -> FastAPI:
     """Create the app, optionally injecting dependencies for offline tests."""
+    effective_agent_settings = agent_settings or AgentSettings(
+        workspace_root=settings.coding_workspace_root,
+        model=settings.coding_model,
+        max_remediation_cycles=settings.coding_max_remediation_cycles,
+        shell_timeout_seconds=settings.coding_shell_timeout_seconds,
+        web_search_enabled=settings.coding_web_search_enabled,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -39,15 +49,9 @@ def create_app(
         tracing = None
         if active_service is None:
             tracing = create_tracing()
-            agent_settings = AgentSettings(
-                workspace_root=settings.coding_workspace_root,
-                model=settings.coding_model,
-                max_remediation_cycles=settings.coding_max_remediation_cycles,
-                shell_timeout_seconds=settings.coding_shell_timeout_seconds,
-            )
             active_service = CodingAgentService(
                 lambda root: create_coding_agent(
-                    settings=replace(agent_settings, workspace_root=root)
+                    settings=replace(effective_agent_settings, workspace_root=root)
                 ),
                 callback_factory=tracing.callback_factory if tracing else None,
             )
@@ -67,8 +71,15 @@ def create_app(
                 logger.info("Coding agent application shutdown completed")
 
     app = FastAPI(title="Coding Agent API", lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.state.ready = False
     app.include_router(router)
+    app.include_router(system_router)
 
     @app.get("/health")
     async def health() -> JSONResponse:
@@ -77,6 +88,17 @@ def create_app(
             {"status": "ready" if app.state.ready else "unavailable"},
             status_code=200 if app.state.ready else 503,
         )
+
+    @app.get("/v1/benchmark-config")
+    async def benchmark_config() -> dict[str, str | int | bool]:
+        """Expose only effective, non-secret settings needed for evaluation."""
+        model = effective_agent_settings.model
+        return {
+            "model": model if isinstance(model, str) else type(model).__name__,
+            "max_remediation_cycles": effective_agent_settings.max_remediation_cycles,
+            "shell_timeout_seconds": effective_agent_settings.shell_timeout_seconds,
+            "web_search_enabled": effective_agent_settings.web_search_enabled,
+        }
 
     async def service_error(request: Request, exc: Exception) -> JSONResponse:
         status = {
