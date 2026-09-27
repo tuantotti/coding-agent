@@ -23,6 +23,11 @@ dependencies = [
 
 [dependency-groups]
 dev = ["pytest>=8.3.0", "pytest-asyncio>=0.24.0", "ruff>=0.7.0"]
+benchmark = [
+    "datasets>=3.0.0",
+    "huggingface-hub>=0.27.0",
+    "swebench>=4.1.0,<5",
+]
 
 [tool.ruff]
 line-length = 88
