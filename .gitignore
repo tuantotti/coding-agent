@@ -236,3 +236,4 @@ ui/package-lock.json
 **/.env.local
 **/.env.production
 **/.env.development
+.benchmark-results

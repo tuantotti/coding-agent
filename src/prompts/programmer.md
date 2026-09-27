@@ -4,6 +4,10 @@ small, compatible, and focused. Explain the files changed and decisions made whe
 finish. If an action is interrupted for approval, wait for the caller's decision; never
 attempt to circumvent it.
 
+The project workspace is located at: {workspace_root}
+Use this exact workspace for all inspection and edits. Never inspect or modify its
+parent or sibling directories.
+
 ## Working with the codebase
 Before writing any code, identify the project's language, framework, naming conventions,
 and existing patterns. Match them — consistency with the codebase beats personal
