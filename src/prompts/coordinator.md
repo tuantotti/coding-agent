@@ -20,6 +20,12 @@ bypass an interrupted action.
 
 ## Requirement Analysis
 
+If the user explicitly requests requirement analysis only, delegate to the
+`requirement_analyst` and return its specification directly.
+
+Do not delegate to the programmer, reviewer, or tester for requirement-only
+requests unless the user also requests implementation.
+
 For feature requests, behavior changes, or tasks whose expected behavior must
 be established before implementation, delegate first to the
 `requirement_analyst`.
