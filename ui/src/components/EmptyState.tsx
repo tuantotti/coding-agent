@@ -1,4 +1,11 @@
-import { Code2, Lightbulb, ScanSearch, ClipboardList, FlaskConical } from "lucide-react";
+import {
+  ClipboardList,
+  Code2,
+  FileSearch2,
+  FlaskConical,
+  Lightbulb,
+  ScanSearch,
+} from "lucide-react";
 
 interface Props {
   onChipClick: (text: string) => void;
@@ -11,6 +18,16 @@ const CHIPS = [
 ];
 
 const AGENT_CARDS = [
+  {
+    icon: <FileSearch2 size={16} />,
+    iconBg: "rgba(139,92,246,0.15)",
+    iconColor: "#a78bfa",
+    action: "Analyze Requirement",
+    title: "Requirement Analyst",
+    desc: "Analyze requests, inspect repository context, identify ambiguity, and produce testable requirements.",
+    prompt:
+      "Analyze the requirements for this task only. Do not implement or modify source code: ",
+  },
   {
     icon: <Code2 size={16} />,
     iconBg: "rgba(37,99,235,0.15)",
@@ -45,7 +62,11 @@ export function EmptyState({ onChipClick }: Props) {
     <>
       <div className="quick-chips">
         {CHIPS.map((c) => (
-          <button key={c.label} className="quick-chip" onClick={() => onChipClick(c.label)}>
+          <button
+            key={c.label}
+            className="quick-chip"
+            onClick={() => onChipClick(c.label)}
+          >
             {c.icon}
             {c.label}
           </button>
@@ -54,15 +75,34 @@ export function EmptyState({ onChipClick }: Props) {
 
       <div className="agent-cards">
         {AGENT_CARDS.map((card) => (
-          <div key={card.title} className="agent-card" onClick={() => onChipClick(card.prompt)}>
+          <div
+            key={card.title}
+            className="agent-card"
+            onClick={() => onChipClick(card.prompt)}
+          >
             <div className="agent-card-header">
-              <div className="agent-card-icon" style={{ background: card.iconBg, color: card.iconColor }}>
+              <div
+                className="agent-card-icon"
+                style={{
+                  background: card.iconBg,
+                  color: card.iconColor,
+                }}
+              >
                 {card.icon}
               </div>
-              <span className="agent-card-action">{card.action}</span>
+
+              <span className="agent-card-action">
+                {card.action}
+              </span>
             </div>
-            <div className="agent-card-title">{card.title}</div>
-            <div className="agent-card-desc">{card.desc}</div>
+
+            <div className="agent-card-title">
+              {card.title}
+            </div>
+
+            <div className="agent-card-desc">
+              {card.desc}
+            </div>
           </div>
         ))}
       </div>

@@ -1,5 +1,7 @@
 """Tester subagent specification."""
 
+from pathlib import Path
+
 from deepagents import SubAgent
 from deepagents.backends.protocol import BackendProtocol
 from langchain_core.language_models import BaseChatModel
@@ -9,14 +11,17 @@ from src.prompts import load_prompt
 
 
 def create_tester_subagent(
-    model: str | BaseChatModel, backend: BackendProtocol
+    model: str | BaseChatModel,
+    backend: BackendProtocol,
+    *,
+    workspace_root: str | Path = ".",
 ) -> SubAgent:
     """Return the isolated tester with approved local-shell access."""
     return {
         "name": "tester",
         "description": "Runs approved checks and reports their outcomes.",
         "model": model,
-        "system_prompt": load_prompt("tester"),
+        "system_prompt": load_prompt("tester", workspace_root=workspace_root),
         "middleware": [
             filesystem_middleware(
                 backend, [*READ_TOOLS, "execute"], READ_ONLY_PERMISSIONS

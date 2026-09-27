@@ -12,6 +12,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.config import READ_ONLY_PERMISSIONS, READ_TOOLS, filesystem_middleware
 from src.agents.information_retriever import create_information_retriever_subagent
+from src.agents.requirement import create_requirement_subagent
 from src.agents.programmer import create_programmer_subagent
 from src.agents.reviewer import create_reviewer_subagent
 from src.agents.tester import create_tester_subagent
@@ -40,6 +41,7 @@ class AgentSettings:
     checkpointer: BaseCheckpointSaver | None = None
     max_remediation_cycles: int = 2
     shell_timeout_seconds: int = 120
+    web_search_enabled: bool = True
 
     def resolved_workspace_root(self) -> Path:
         """Validate the project context and shell working directory."""
@@ -80,17 +82,29 @@ def create_coding_agent(settings: AgentSettings | None = None) -> CompiledStateG
     workspace_root = agent_settings.resolved_workspace_root()
     backend = _create_backend(agent_settings, workspace_root)
     subagents = [
-        create_programmer_subagent(
+        create_requirement_subagent(
             create_azure_model(deployment=agent_settings.model), backend
+        ),
+        create_programmer_subagent(
+            create_azure_model(deployment=agent_settings.model),
+            backend,
+            workspace_root=workspace_root,
         ),
         create_reviewer_subagent(
-            create_azure_model(deployment=agent_settings.model), backend
+            create_azure_model(deployment=agent_settings.model),
+            backend,
+            workspace_root=workspace_root,
         ),
         create_tester_subagent(
-            create_azure_model(deployment=agent_settings.model), backend
+            create_azure_model(deployment=agent_settings.model),
+            backend,
+            workspace_root=workspace_root,
         ),
         create_information_retriever_subagent(
-            create_azure_model(deployment=agent_settings.model), backend
+            create_azure_model(deployment=agent_settings.model),
+            backend,
+            workspace_root=workspace_root,
+            web_search_enabled=agent_settings.web_search_enabled,
         ),
     ]
     return create_deep_agent(

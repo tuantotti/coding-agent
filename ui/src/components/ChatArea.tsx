@@ -14,6 +14,7 @@ interface Props {
 }
 
 const AGENT_META: Record<string, { emoji: string; color: string; label: string }> = {
+  requirement_analyst:   { emoji: "📋", color: "#8b5cf6", label: "Requirement Analyst" },
   programmer:            { emoji: "💻", color: "#2563eb", label: "Programmer" },
   tester:                { emoji: "🧪", color: "#16a34a", label: "Tester" },
   reviewer:              { emoji: "🔍", color: "#d97706", label: "Reviewer" },
