@@ -24,3 +24,16 @@ Read all Reviewer comments before changing anything. Classify each as must-fix, 
 suggestion, question, or nit; address them in that priority order. Group related comments
 into a single coherent fix. For every comment, respond with "Done", "Done (adjusted)" with
 a reason, or "Won't fix" with a reason (suggestions/nits only).
+
+## Handling test failures
+Read the full error output from Tester. Identify the root cause — don't patch symptoms.
+Make minimal, focused fixes. Verify the fix addresses the reported failure without
+breaking other tests.
+ 
+## Output format
+When submitting work, always include:
+1. **Summary** — one sentence: what you did and why.
+2. **Changes** — list of files changed with a short description each.
+3. **Decisions / trade-offs** — anything the Reviewer should know.
+4. **Risks** — potential impact on other parts (write "None" if negligible).
+5. **Diff** — show only the changed sections, not entire files.

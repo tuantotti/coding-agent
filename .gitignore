@@ -40,6 +40,8 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Unit test / coverage reports
+# Eval run artifacts (not fixtures) from scripts/eval_programmer_skill.py
+tests/fixtures/codebase_understanding/reports/
 htmlcov/
 .tox/
 .nox/
@@ -237,4 +239,6 @@ ui/package-lock.json
 **/.env.local
 **/.env.production
 **/.env.development
+
+dat_test/
 .benchmark-results
