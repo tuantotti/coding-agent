@@ -39,6 +39,7 @@ benchmark = [
     { name = "datasets" },
     { name = "huggingface-hub" },
     { name = "swebench" },
+    { name = "tqdm" },
 ]
 dev = [
     { name = "pytest" },
@@ -69,6 +70,7 @@ benchmark = [
     { name = "datasets", specifier = ">=3.0.0" },
     { name = "huggingface-hub", specifier = ">=0.27.0" },
     { name = "swebench", specifier = ">=4.1.0,<5" },
+    { name = "tqdm", specifier = ">=4.66.0" },
 ]
 dev = [
     { name = "pytest", specifier = ">=8.3.0" },

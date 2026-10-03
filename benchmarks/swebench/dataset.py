@@ -3,6 +3,7 @@
 import re
 from collections.abc import Callable, Iterable, Mapping
 
+from loguru import logger
 from pydantic import ValidationError
 
 from benchmarks.swebench.config import BenchmarkConfig
@@ -57,6 +58,12 @@ def load_instances(
     dataset_info_fn: Callable[[str, str | None], str] | None = None,
 ) -> DatasetSelection:
     """Load, project, pin, and filter benchmark instances."""
+    logger.info(
+        "Loading dataset={} split={} revision={}",
+        config.dataset_name,
+        config.split,
+        config.dataset_revision,
+    )
     loader = load_dataset_fn or _default_loader
     revision_lookup = dataset_info_fn or _default_revision
     try:
@@ -86,6 +93,23 @@ def load_instances(
             raise DatasetError(f"Duplicate instance_id: {instance.instance_id}")
         by_id[instance.instance_id] = instance
 
+    unknown_ignored = [
+        item for item in config.ignored_instance_ids if item not in by_id
+    ]
+    if unknown_ignored:
+        raise DatasetError(f"Ignored instances not found: {', '.join(unknown_ignored)}")
+    if config.instance_ids:
+        unselected_ignored = [
+            item
+            for item in config.ignored_instance_ids
+            if item not in config.instance_ids
+        ]
+        if unselected_ignored:
+            raise DatasetError(
+                "Ignored instances are outside the selected instance_ids: "
+                + ", ".join(unselected_ignored)
+            )
+
     if config.all_instances:
         selected = projected
     else:
@@ -94,6 +118,13 @@ def load_instances(
             raise DatasetError(f"Requested instances not found: {', '.join(missing)}")
         selected = tuple(by_id[item] for item in config.instance_ids)
 
+    logger.info(
+        "Selected {} of {} instances from dataset={} revision={}",
+        len(selected),
+        len(projected),
+        config.dataset_name,
+        resolved_revision,
+    )
     return DatasetSelection(
         dataset_name=config.dataset_name,
         split=config.split,

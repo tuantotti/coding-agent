@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from loguru import logger
 from pydantic import Field
 
 from benchmarks.swebench.models import AttemptStatus, StrictRecord
@@ -102,8 +103,10 @@ class ArtifactStore:
             right = manifest.model_dump(exclude=temporal)
             if left != right:
                 raise ArtifactError("Stored manifest does not match this run.")
+            logger.info("Resuming run={} artifacts={}", manifest.run_id, self.root)
             return
         _atomic_model(path, manifest)
+        logger.info("Initialized run={} artifacts={}", manifest.run_id, self.root)
 
     def finalize(self, completed_at: str) -> None:
         """Record successful command completion without changing run identity."""
@@ -113,6 +116,7 @@ class ArtifactStore:
         except Exception as exc:
             raise ArtifactError("Stored manifest is invalid.") from exc
         _atomic_model(path, manifest.model_copy(update={"completed_at": completed_at}))
+        logger.info("Finalized run={} manifest={}", manifest.run_id, path)
 
     def next_attempt(self, instance_id: str) -> tuple[int, Path]:
         """Allocate the next immutable attempt directory."""
@@ -160,10 +164,9 @@ class ArtifactStore:
             raise ArtifactError("Patch size does not match result metadata.")
         _atomic_text(attempt_dir / "patch.diff", patch_text)
         _atomic_model(attempt_dir / "result.json", result)
+        logger.debug("Saved attempt result and patch in {}", attempt_dir)
 
-    def latest_result(
-        self, instance_id: str
-    ) -> tuple[AttemptResult, str] | None:
+    def latest_result(self, instance_id: str) -> tuple[AttemptResult, str] | None:
         """Return the newest valid terminal result and verified patch."""
         instance_root = self.root / "instances" / instance_id
         if not instance_root.exists():
@@ -222,4 +225,5 @@ class ArtifactStore:
             lines.append(prediction.model_dump_json())
         path = self.root / "predictions.jsonl"
         _atomic_text(path, "\n".join(lines) + "\n")
+        logger.debug("Wrote {} predictions to {}", len(lines), path)
         return path

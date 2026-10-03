@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
 
@@ -73,9 +74,7 @@ class ApiRun(ApiRecord):
 
     run_id: str
     source_folder: str
-    status: Literal[
-        "queued", "running", "awaiting_approval", "completed", "failed"
-    ]
+    status: Literal["queued", "running", "awaiting_approval", "completed", "failed"]
     created_at: datetime
     updated_at: datetime
     output: str | None = None
@@ -135,6 +134,7 @@ class AgentApiClient:
 
     async def require_benchmark_safe(self) -> BenchmarkServerSettings:
         """Return effective settings only when external web lookup is disabled."""
+        logger.info("Checking benchmark API settings")
         last_error: Exception | None = None
         for attempt in range(len(self._RETRY_DELAYS) + 1):
             try:
@@ -155,6 +155,9 @@ class AgentApiClient:
                         raise AgentApiError(
                             "Benchmark refused because server web search is enabled."
                         )
+                    logger.info(
+                        "Benchmark API preflight passed model={}", effective.model
+                    )
                     return effective
                 if response.status_code < 500:
                     raise AgentApiError(
@@ -165,6 +168,12 @@ class AgentApiClient:
                     f"Coding-agent API returned HTTP {response.status_code}."
                 )
             if attempt < len(self._RETRY_DELAYS):
+                logger.warning(
+                    "API preflight retry={} delay={}s reason={}",
+                    attempt + 1,
+                    self._RETRY_DELAYS[attempt],
+                    last_error,
+                )
                 await self._sleep(self._RETRY_DELAYS[attempt])
         raise AgentApiError(
             "Coding-agent benchmark preflight retries were exhausted."
@@ -172,6 +181,7 @@ class AgentApiClient:
 
     async def start(self, task: str, source_folder: Path) -> ApiRun:
         """Create a run, retrying a transient global-run conflict."""
+        logger.info("Starting agent run workspace={}", source_folder)
         return await self._request_run(
             "POST",
             "v1/runs",
@@ -186,6 +196,11 @@ class AgentApiClient:
     async def approve(self, run: ApiRun) -> ApiRun:
         """Approve every action in server-provided order."""
         self._validate_approvals(run)
+        logger.info(
+            "Automatically approving agent_run={} actions={}",
+            run.run_id,
+            sum(len(item.action_requests) for item in run.approvals),
+        )
         decisions = {
             approval.interrupt_id: [
                 {"type": "approve"} for _ in approval.action_requests
@@ -213,6 +228,7 @@ class AgentApiClient:
                 run_id = run.run_id
                 return await self._drive(run, event_sink)
         except TimeoutError as exc:
+            logger.warning("Agent run={} timed out after {}s", run_id, timeout_seconds)
             raise AgentTimedOut(run_id) from exc
         except AgentApiError as exc:
             if run_id and not exc.run_id:
@@ -356,6 +372,14 @@ class AgentApiClient:
                     occupancy_unknown=method == "POST",
                 )
             if attempt < len(self._RETRY_DELAYS):
+                logger.warning(
+                    "API request method={} path={} retry={} delay={}s reason={}",
+                    method,
+                    path,
+                    attempt + 1,
+                    self._RETRY_DELAYS[attempt],
+                    last_error,
+                )
                 await self._sleep(self._RETRY_DELAYS[attempt])
         raise AgentApiError(
             "Coding-agent API retries were exhausted.",

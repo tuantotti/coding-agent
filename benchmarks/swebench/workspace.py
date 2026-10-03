@@ -4,6 +4,8 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+from loguru import logger
+
 from benchmarks.swebench.models import BenchmarkInstance
 
 
@@ -47,14 +49,26 @@ class WorkspaceManager:
 
     def prepare(self, instance: BenchmarkInstance, attempt_dir: Path) -> Path:
         """Return a clean checkout detached at the requested base commit."""
+        logger.info(
+            "Preparing workspace instance={} repo={} commit={}",
+            instance.instance_id,
+            instance.repo,
+            instance.base_commit,
+        )
         repos = self.cache_root / "repos"
         repos.mkdir(parents=True, exist_ok=True)
         cache = repos / f"{instance.repo.replace('/', '__')}.git"
         if not cache.exists():
+            logger.info("Cloning repository={} into cache={}", instance.repo, cache)
             _git("clone", "--bare", self.remote_url(instance), str(cache))
         try:
             _git("cat-file", "-e", f"{instance.base_commit}^{{commit}}", cwd=cache)
         except WorkspaceError:
+            logger.info(
+                "Fetching missing commit={} repo={}",
+                instance.base_commit,
+                instance.repo,
+            )
             _git("fetch", "--prune", "origin", instance.base_commit, cwd=cache)
 
         workspace = attempt_dir / "workspace"
@@ -67,4 +81,7 @@ class WorkspaceManager:
             raise WorkspaceError("Workspace HEAD does not match base_commit.")
         if _git("status", "--porcelain", cwd=workspace):
             raise WorkspaceError("Prepared workspace is not clean.")
+        logger.info(
+            "Workspace ready instance={} path={}", instance.instance_id, workspace
+        )
         return workspace

@@ -7,6 +7,9 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
+from loguru import logger
+from tqdm import tqdm
+
 from benchmarks.swebench.api import AgentApiClient, AgentApiError, AgentTimedOut
 from benchmarks.swebench.artifacts import ArtifactStore, AttemptResult
 from benchmarks.swebench.config import BenchmarkConfig
@@ -64,14 +67,41 @@ class BenchmarkRunner:
         skipped = 0
         stop_after_attempt = False
         instance_ids = tuple(item.instance_id for item in self.selection.instances)
+        logger.info(
+            "Run {}: processing {} instances", self.config.run_id, len(instance_ids)
+        )
+        progress = tqdm(
+            total=len(self.selection.instances),
+            desc="SWE-bench",
+            unit="instance",
+            dynamic_ncols=True,
+        )
+        ignored_instance_ids = set(self.config.ignored_instance_ids)
         for instance in self.selection.instances:
+            progress.set_postfix_str(f"instance={instance.instance_id}", refresh=True)
+
+            if instance.instance_id in ignored_instance_ids:
+                logger.info("Skipping instance={}: ignored", instance.instance_id)
+                skipped += 1
+                progress.update(1)
+                continue
+
             if not self.artifacts.should_run(
                 instance.instance_id, self.config.retry_failures
             ):
+                logger.info("Skipping instance={}: resume policy", instance.instance_id)
                 skipped += 1
+                progress.update(1)
                 continue
+
             attempted += 1
             number, attempt_dir = self.artifacts.next_attempt(instance.instance_id)
+            logger.info(
+                "Starting instance={} attempt={} artifacts={}",
+                instance.instance_id,
+                number,
+                attempt_dir,
+            )
             task = render_task(instance.problem_statement)
             self.artifacts.write_request(
                 attempt_dir,
@@ -96,12 +126,22 @@ class BenchmarkRunner:
                         task,
                         workspace,
                         self.config.instance_timeout_seconds,
-                        lambda record: self.artifacts.append_event(
-                            attempt_dir, record
-                        ),
+                        lambda record: self.artifacts.append_event(attempt_dir, record),
                     )
                 except (AgentTimedOut, AgentApiError) as exc:
+                    logger.warning(
+                        "Instance={} agent_run={}: {}",
+                        instance.instance_id,
+                        exc.run_id,
+                        exc,
+                    )
                     if exc.run_id:
+                        logger.info(
+                            "Recovering instance={} agent_run={} mode={}",
+                            instance.instance_id,
+                            exc.run_id,
+                            "observe" if isinstance(exc, AgentTimedOut) else "continue",
+                        )
                         try:
                             recovery = (
                                 self.api_client.observe_until_terminal
@@ -116,6 +156,12 @@ class BenchmarkRunner:
                                 ),
                             )
                         except (AgentTimedOut, AgentApiError) as recovery_error:
+                            logger.error(
+                                "Recovery failed instance={} agent_run={}: {}",
+                                instance.instance_id,
+                                exc.run_id,
+                                recovery_error,
+                            )
                             status = (
                                 AttemptStatus.TIMED_OUT
                                 if isinstance(exc, AgentTimedOut)
@@ -149,9 +195,13 @@ class BenchmarkRunner:
             except _AttemptFinished:
                 pass
             except WorkspaceError as exc:
+                logger.error(
+                    "Workspace failed instance={}: {}", instance.instance_id, exc
+                )
                 status = AttemptStatus.CHECKOUT_ERROR
                 runner_error = str(exc)
             except PatchError as exc:
+                logger.error("Patch failed instance={}: {}", instance.instance_id, exc)
                 status = AttemptStatus.PATCH_ERROR
                 runner_error = str(exc)
 
@@ -171,9 +221,27 @@ class BenchmarkRunner:
                 runner_error=runner_error,
             )
             self.artifacts.finish_attempt(attempt_dir, result, patch_text)
+            logger.log(
+                "INFO" if status == AttemptStatus.COMPLETED else "WARNING",
+                "Finished instance={} attempt={} agent_run={} status={} "
+                "elapsed={:.2f}s patch_bytes={}",
+                instance.instance_id,
+                number,
+                agent_run_id,
+                status.value,
+                result.elapsed_seconds,
+                result.patch_size_bytes,
+            )
             self.artifacts.write_predictions(instance_ids, self.config.model_label)
+            progress.update(1)
             if stop_after_attempt:
+                logger.warning(
+                    "Stopping run={}: API occupancy unresolved after instance={}",
+                    self.config.run_id,
+                    instance.instance_id,
+                )
                 break
+        progress.close()
 
         predictions = self.artifacts.write_predictions(
             instance_ids, self.config.model_label

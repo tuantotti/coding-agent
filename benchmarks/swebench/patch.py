@@ -5,6 +5,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from loguru import logger
+
 
 class PatchError(RuntimeError):
     """The workspace could not be converted into a valid patch."""
@@ -21,6 +23,7 @@ class CapturedPatch:
 
 def capture_patch(workspace: Path, max_bytes: int) -> CapturedPatch:
     """Capture tracked and untracked changes without altering file contents."""
+    logger.info("Capturing patch workspace={}", workspace)
     if max_bytes <= 0:
         raise PatchError("max_bytes must be positive.")
     primary_error: Exception | None = None
@@ -71,6 +74,7 @@ def capture_patch(workspace: Path, max_bytes: int) -> CapturedPatch:
         text = raw.decode("utf-8", errors="strict")
     except UnicodeDecodeError as exc:
         raise PatchError("Patch is not valid UTF-8.") from exc
+    logger.info("Captured patch workspace={} bytes={}", workspace, len(raw))
     return CapturedPatch(
         text=text,
         sha256=hashlib.sha256(raw).hexdigest(),

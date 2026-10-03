@@ -23,6 +23,7 @@ class BenchmarkConfig(StrictRecord):
     split: str = "test"
     dataset_revision: str | None = None
     instance_ids: tuple[str, ...] = ()
+    ignored_instance_ids: tuple[str, ...] = ()
     all_instances: bool = False
     instance_timeout_seconds: float = Field(default=3600.0, gt=0)
     poll_interval_seconds: float = Field(default=1.0, gt=0)
@@ -72,4 +73,6 @@ class BenchmarkConfig(StrictRecord):
             raise ValueError("Automatic approval risk must be acknowledged.")
         if len(set(self.instance_ids)) != len(self.instance_ids):
             raise ValueError("instance_ids must not contain duplicates.")
+        if len(set(self.ignored_instance_ids)) != len(self.ignored_instance_ids):
+            raise ValueError("ignored_instance_ids must not contain duplicates.")
         return self

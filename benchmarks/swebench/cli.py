@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
+from loguru import logger
 from pydantic import ValidationError
 
 from benchmarks.swebench.api import (
@@ -22,6 +23,7 @@ from benchmarks.swebench.dataset import DatasetError, load_instances
 from benchmarks.swebench.prompt import prompt_template_sha256
 from benchmarks.swebench.runner import BenchmarkRunner
 from benchmarks.swebench.workspace import WorkspaceManager
+from src.logger import configure_logging
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,14 +36,13 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--cache", type=Path)
     generate.add_argument("--run-id", required=True)
     generate.add_argument("--model-label", required=True)
-    generate.add_argument(
-        "--dataset-name", default="SWE-bench/SWE-bench_Verified"
-    )
+    generate.add_argument("--dataset-name", default="SWE-bench/SWE-bench_Verified")
     generate.add_argument("--split", default="test")
     generate.add_argument("--dataset-revision")
     selection = generate.add_mutually_exclusive_group(required=True)
     selection.add_argument("--instance-id", action="append", default=[])
     selection.add_argument("--all", action="store_true", dest="all_instances")
+    generate.add_argument("--ignore-instance", action="append", default=[])
     generate.add_argument("--instance-timeout-seconds", type=float, default=3600)
     generate.add_argument("--poll-interval-seconds", type=float, default=1)
     generate.add_argument("--max-patch-bytes", type=int, default=10_000_000)
@@ -55,6 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
 def _config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
     output = args.output.resolve()
     cache = (args.cache or output / "cache").resolve()
+
+    instances_dir = output / args.run_id / "instances"
+    ignore_instances = sorted(
+        path.name for path in instances_dir.iterdir() if path.is_dir()
+    )
+
     return BenchmarkConfig(
         api_url=args.api_url,
         output_root=output,
@@ -65,6 +72,7 @@ def _config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
         split=args.split,
         dataset_revision=args.dataset_revision,
         instance_ids=tuple(args.instance_id),
+        ignored_instance_ids=ignore_instances,
         all_instances=args.all_instances,
         instance_timeout_seconds=args.instance_timeout_seconds,
         poll_interval_seconds=args.poll_interval_seconds,
@@ -106,9 +114,7 @@ def _manifest(
         max_patch_bytes=config.max_patch_bytes,
         agent_settings={
             "CODING_MODEL": server_settings.model,
-            "CODING_MAX_REMEDIATION_CYCLES": (
-                server_settings.max_remediation_cycles
-            ),
+            "CODING_MAX_REMEDIATION_CYCLES": (server_settings.max_remediation_cycles),
             "CODING_SHELL_TIMEOUT_SECONDS": server_settings.shell_timeout_seconds,
             "CODING_WEB_SEARCH_ENABLED": server_settings.web_search_enabled,
         },
@@ -122,12 +128,15 @@ async def async_main(argv: Sequence[str] | None = None) -> int:
     """Parse, validate, and run one generation command."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    configure_logging()
     try:
         config = _config_from_args(args)
-        print(
+        logger.info(
+            "Starting benchmark run={} model={}", config.run_id, config.model_label
+        )
+        logger.warning(
             "WARNING: benchmark mode automatically approves agent writes and shell "
-            "commands. Run the API in a disposable container or VM.",
-            file=sys.stderr,
+            "commands. Run the API in a disposable container or VM."
         )
         selection = load_instances(config)
         async with AgentApiClient(
@@ -153,9 +162,17 @@ async def async_main(argv: Sequence[str] | None = None) -> int:
         AgentApiError,
         OSError,
     ) as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        logger.error("Benchmark failed: {}", exc)
         return 2
 
+    logger.info(
+        "Benchmark run={} finished: attempted={} skipped={} outcomes={} predictions={}",
+        config.run_id,
+        summary.attempted,
+        summary.skipped,
+        summary.counts,
+        summary.predictions_path,
+    )
     print(f"Predictions: {summary.predictions_path}")
     print(f"Completed: {summary.completed}/{summary.total}")
     return 0 if summary.attempted or summary.skipped else 1
