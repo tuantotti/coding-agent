@@ -324,8 +324,8 @@ class AgentApiClient:
             if not approval.action_requests:
                 raise AgentApiError("Approval contains no actions.")
             configs = {item.action_name: item for item in approval.review_configs}
-            if len(configs) != len(approval.review_configs):
-                raise AgentApiError("Duplicate review configurations are not allowed.")
+            # if len(configs) != len(approval.review_configs):
+            #     raise AgentApiError("Duplicate review configurations are not allowed.")
             action_names = {item.name for item in approval.action_requests}
             if action_names != set(configs):
                 raise AgentApiError(

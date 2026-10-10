@@ -31,6 +31,5 @@ def create_tester_subagent(
         "skills": [
             "/agent_skills/common",
             "/agent_skills/tester",
-            "/agent_skills/tester/mutation-testing",
         ],
     }

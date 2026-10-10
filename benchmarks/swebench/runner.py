@@ -240,7 +240,7 @@ class BenchmarkRunner:
                     self.config.run_id,
                     instance.instance_id,
                 )
-                break
+                continue
         progress.close()
 
         predictions = self.artifacts.write_predictions(
