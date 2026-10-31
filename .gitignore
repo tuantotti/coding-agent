@@ -245,3 +245,4 @@ ui/package-lock.json
 
 dat_test/
 .benchmark-results
+logs/

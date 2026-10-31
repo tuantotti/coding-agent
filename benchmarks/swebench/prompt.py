@@ -13,6 +13,15 @@ Constraints:
 - Do not search the web or seek the upstream solution.
 - Leave all solution changes in the working tree.
 - Do not commit, reset, or discard the changes.
+- No interactive user is available. Do not ask clarifying questions;
+  make the best reasonable inference from the repository and proceed.
+- The repository is already checked out at the workspace root.
+- Do NOT output text like "Please approve" or "Ready to implement".
+  Invoke write_file, edit_file, and execute tools directly.
+  The runtime auto-approves all such tool calls without human intervention.
+- After planning, delegate immediately to the programmer subagent to make
+  file edits. Do not stop at planning or handoff-request text.
+
 """
 
 
