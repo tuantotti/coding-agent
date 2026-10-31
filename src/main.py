@@ -13,13 +13,9 @@ from src.agents import AgentSettings, create_coding_agent
 from src.logger import configure_logging
 from src.routes.runs import router
 from src.routes.system import system_router
-from src.services.coding_agent import (
-    CodingAgentService,
-    InvalidApproval,
-    InvalidSourceFolder,
-    RunConflict,
-    RunNotFound,
-)
+from src.services.coding_agent import (CodingAgentService, InvalidApproval,
+                                       InvalidSourceFolder, RunConflict,
+                                       RunNotFound)
 from src.services.events import InvalidCursor, ReplayExpired
 from src.services.tracing import create_tracing
 from src.settings import settings
@@ -38,6 +34,7 @@ def create_app(
     effective_agent_settings = agent_settings or AgentSettings(
         workspace_root=settings.coding_workspace_root,
         model=settings.coding_model,
+        reasoning_effort=settings.coding_model_reasoning_effort,
         max_remediation_cycles=settings.coding_max_remediation_cycles,
         shell_timeout_seconds=settings.coding_shell_timeout_seconds,
         web_search_enabled=settings.coding_web_search_enabled,

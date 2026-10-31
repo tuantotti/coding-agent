@@ -12,7 +12,7 @@ jobs=""
 ready=0
 
 evaluate() {
-  uv run --group benchmark python -m swebench.harness.run_evaluation \
+  caffeinate -i uv run --group benchmark python -m swebench.harness.run_evaluation \
     --dataset_name "$dataset" \
     --split test \
     --predictions_path "$predictions" \
@@ -26,7 +26,7 @@ evaluate() {
 aggregate() {
   # Use the official report writer directly. This reads saved report.json files;
   # it does not pull images, rebuild test specs, or rerun/regrade tests.
-  uv run --group benchmark python - "$dataset" "$predictions" "$run_id" <<'PY'
+  caffeinate -i uv run --group benchmark python - "$dataset" "$predictions" "$run_id" <<'PY'
 import json
 import sys
 from swebench.harness.reporting import make_run_report
@@ -77,7 +77,7 @@ docker info >/dev/null
 jobs="$(mktemp)"
 
 # Derive jobs from predictions rather than relying on a stale image list.
-uv run --group benchmark python - "$predictions" "$run_id" > "$jobs" <<'PY'
+caffeinate -i uv run --group benchmark python - "$predictions" "$run_id" > "$jobs" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -111,7 +111,7 @@ while IFS=$'\t' read -r instance image report; do
   aggregate
 
   # The harness can return exit code 0 even when an instance failed to evaluate.
-  uv run --group benchmark python - "$report" "$instance" <<'PY'
+  caffeinate -i uv run --group benchmark python - "$report" "$instance" <<'PY'
 import json
 import sys
 from pathlib import Path

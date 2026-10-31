@@ -36,6 +36,9 @@ class Settings(BaseSettings):
         default="gpt-5.4-nano",
         min_length=1,
     )
+    coding_model_reasoning_effort: str = Field(
+        default=None,
+    )
     coding_workspace_root: DirectoryPath = Field(
         default_factory=Path.cwd,
     )

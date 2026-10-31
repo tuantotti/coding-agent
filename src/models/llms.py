@@ -1,9 +1,12 @@
 from langchain_openai import AzureChatOpenAI
+from loguru import logger
 
 from src.settings import settings
 
 
-def create_azure_model(deployment: str) -> AzureChatOpenAI:
+def create_azure_model(
+    deployment: str, reasoning_effort: str | None = None
+) -> AzureChatOpenAI:
     """Create an Azure OpenAI chat model from application settings."""
 
     api_key = (
@@ -16,11 +19,27 @@ def create_azure_model(deployment: str) -> AzureChatOpenAI:
     # Strip provider prefix e.g. "azure_openai:gpt-4.1-mini" → "gpt-4.1-mini"
     deployment_name = deployment.split(":", 1)[-1]
 
-    return AzureChatOpenAI(
-        api_key=api_key,
-        azure_endpoint=endpoint,
-        api_version=api_version,
-        azure_deployment=deployment_name,
-        temperature=0,
-        max_retries=3,
-    )
+    if reasoning_effort:
+        logger.success(f"Use model={deployment}, reasoning_effort={reasoning_effort}")
+
+        return AzureChatOpenAI(
+            temperature=0.0,
+            reasoning_effort=reasoning_effort,
+            api_key=api_key,
+            azure_endpoint=endpoint,
+            api_version=api_version,
+            azure_deployment=deployment_name,
+            max_retries=3,
+        )
+    else:
+        # some models like gpt 4.1 do not support params reasoning_effort
+        logger.success(f"Use model={deployment}")
+
+        return AzureChatOpenAI(
+            temperature=0.0,
+            api_key=api_key,
+            azure_endpoint=endpoint,
+            api_version=api_version,
+            azure_deployment=deployment_name,
+            max_retries=3,
+        )
